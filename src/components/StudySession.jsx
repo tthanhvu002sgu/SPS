@@ -4,7 +4,7 @@ import { X, Check, Brain, Frown, Sparkles, Smile, Coffee, Volume2 } from 'lucide
 import { processReview } from '../utils/srs';
 import Dashboard from './Dashboard';
 
-const StudySession = ({ words, settings, onUpdateWord }) => {
+const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, reviewHistory }) => {
   const [queue, setQueue] = useState([]);
   const [currentWord, setCurrentWord] = useState(null);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -57,6 +57,10 @@ const StudySession = ({ words, settings, onUpdateWord }) => {
     if (!practiceMode) {
       const updatedWord = processReview(currentWord, grade, settings.intervalMultiplier || 1);
       onUpdateWord(updatedWord);
+    }
+    
+    if (recordReview) {
+      recordReview(currentWord.id, grade);
     }
     
     setIsFlipped(false);
@@ -133,7 +137,7 @@ const StudySession = ({ words, settings, onUpdateWord }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '0.75rem', overflow: 'hidden' }}>
-      <Dashboard words={words} compact={true} />
+      <Dashboard words={words} streak={streak} reviewHistory={reviewHistory} compact={true} />
       
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         <button 

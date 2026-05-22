@@ -6,7 +6,18 @@ import WordList from './components/WordList';
 import { Sparkles, BrainCircuit, Settings as SettingsIcon, Library } from 'lucide-react';
 
 function App() {
-  const { words, settings, addWord, updateWord, updateSettings, deleteWord, importData } = useVocab();
+  const { 
+    words, 
+    settings, 
+    addWord, 
+    updateWord, 
+    updateSettings, 
+    deleteWord, 
+    importData,
+    reviewHistory,
+    recordReview,
+    streak
+  } = useVocab();
   const [activeTab, setActiveTab] = useState('study');
 
   const navItems = [
@@ -63,7 +74,16 @@ function App() {
 
       <main className="main-container">
         {activeTab === 'library' && <WordList words={words} updateWord={updateWord} deleteWord={deleteWord} addWord={addWord} />}
-        {activeTab === 'study' && <StudySession words={words} settings={settings} onUpdateWord={updateWord} />}
+        {activeTab === 'study' && (
+          <StudySession 
+            words={words} 
+            settings={settings} 
+            onUpdateWord={updateWord} 
+            recordReview={recordReview}
+            streak={streak}
+            reviewHistory={reviewHistory}
+          />
+        )}
         {activeTab === 'settings' && <Settings words={words} settings={settings} updateSettings={updateSettings} importData={importData} />}
       </main>
     </>
