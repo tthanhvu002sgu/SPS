@@ -74,55 +74,37 @@ function App() {
         </nav>
       </header>
 
-      <main className="main-container" style={{ position: 'relative', width: '100%', height: '100%' }}>
-        <AnimatePresence mode="wait">
-          {activeTab === 'library' && (
-            <motion.div
-              key="library"
-              initial={{ opacity: 0, y: 12, scale: 0.99 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -12, scale: 0.99 }}
-              transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
-              style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}
-            >
-              <WordList words={words} updateWord={updateWord} deleteWord={deleteWord} addWord={addWord} addWords={addWords} />
-            </motion.div>
-          )}
+      <main className="main-container" style={{ position: 'relative', width: '100%', height: '100%', padding: 0, overflow: 'hidden' }}>
+        <motion.div
+          animate={{
+            x: activeTab === 'study' ? '0%' : activeTab === 'library' ? '-100%' : '-200%'
+          }}
+          transition={{ type: 'spring', stiffness: 280, damping: 30 }}
+          style={{ display: 'flex', width: '300%', height: '100%' }}
+        >
+          {/* Tab 1: Study (Index 0) */}
+          <div style={{ width: '100%', height: '100%', flexShrink: 0, padding: '1rem 1.5rem', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <StudySession 
+              words={words} 
+              settings={settings} 
+              onUpdateWord={updateWord} 
+              recordReview={recordReview}
+              streak={streak}
+              reviewHistory={reviewHistory}
+              isActive={activeTab === 'study'}
+            />
+          </div>
           
-          {activeTab === 'study' && (
-            <motion.div
-              key="study"
-              initial={{ opacity: 0, y: 12, scale: 0.99 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -12, scale: 0.99 }}
-              transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
-              style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}
-            >
-              <StudySession 
-                words={words} 
-                settings={settings} 
-                onUpdateWord={updateWord} 
-                recordReview={recordReview}
-                streak={streak}
-                reviewHistory={reviewHistory}
-                isActive={activeTab === 'study'}
-              />
-            </motion.div>
-          )}
+          {/* Tab 2: Library (Index 1) */}
+          <div style={{ width: '100%', height: '100%', flexShrink: 0, padding: '1rem 1.5rem', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <WordList words={words} updateWord={updateWord} deleteWord={deleteWord} addWord={addWord} addWords={addWords} />
+          </div>
           
-          {activeTab === 'settings' && (
-            <motion.div
-              key="settings"
-              initial={{ opacity: 0, y: 12, scale: 0.99 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -12, scale: 0.99 }}
-              transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
-              style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}
-            >
-              <Settings words={words} settings={settings} updateSettings={updateSettings} importData={importData} />
-            </motion.div>
-          )}
-        </AnimatePresence>
+          {/* Tab 3: Settings (Index 2) */}
+          <div style={{ width: '100%', height: '100%', flexShrink: 0, padding: '1rem 1.5rem', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <Settings words={words} settings={settings} updateSettings={updateSettings} importData={importData} />
+          </div>
+        </motion.div>
       </main>
     </>
   );
