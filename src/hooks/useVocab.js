@@ -60,7 +60,7 @@ export const useVocab = () => {
       const storedWordsStr = localStorage.getItem(STORAGE_KEY);
       const storedSettingsStr = localStorage.getItem(SETTINGS_KEY);
       const storedHistoryStr = localStorage.getItem('spacedrep_review_history');
-      
+
       let initialWords = [];
       if (storedWordsStr) initialWords = JSON.parse(storedWordsStr);
       if (storedSettingsStr) setSettings(JSON.parse(storedSettingsStr));
@@ -75,7 +75,7 @@ export const useVocab = () => {
           const day = String(d.getDate()).padStart(2, '0');
           return `${y}-${m}-${day}`;
         };
-        
+
         initialWords.forEach(w => {
           if (w.lastReviewed) {
             const dateStr = formatDate(new Date(w.lastReviewed));
@@ -89,7 +89,7 @@ export const useVocab = () => {
             }
           }
         });
-        
+
         if (Object.keys(initialHistory).length > 0) {
           localStorage.setItem('spacedrep_review_history', JSON.stringify(initialHistory));
         }
@@ -116,7 +116,7 @@ export const useVocab = () => {
       if (changed) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedWords));
       }
-      
+
       // Auto-backup once a day to a separate key
       const todayDateStr = new Date().toISOString().split('T')[0];
       const lastBackupDate = localStorage.getItem('spacedrep_last_backup_date');
@@ -124,7 +124,7 @@ export const useVocab = () => {
         localStorage.setItem('spacedrep_vocab_backup', JSON.stringify(updatedWords));
         localStorage.setItem('spacedrep_last_backup_date', todayDateStr);
       }
-      
+
       setIsLoading(false);
     };
 
@@ -158,12 +158,12 @@ export const useVocab = () => {
   // Reset `isReviewedToday` if it's a new day
   useEffect(() => {
     if (words.length > 0) {
-      const today = new Date().setHours(0,0,0,0);
+      const today = new Date().setHours(0, 0, 0, 0);
       let changed = false;
-      
+
       const newWords = words.map(w => {
         if (w.isReviewedToday && w.lastReviewed) {
-          const lastReviewDay = new Date(w.lastReviewed).setHours(0,0,0,0);
+          const lastReviewDay = new Date(w.lastReviewed).setHours(0, 0, 0, 0);
           if (lastReviewDay < today) {
             changed = true;
             return { ...w, isReviewedToday: false };
@@ -190,26 +190,26 @@ export const useVocab = () => {
       const day = String(d.getDate()).padStart(2, '0');
       return `${y}-${m}-${day}`;
     };
-    
+
     const todayStr = formatDate(new Date());
     const isCorrect = grade > 0;
-    
+
     setReviewHistory(prev => {
       const dayData = prev[todayStr] || { total: 0, correct: 0, reviewedWords: [] };
-      
+
       const newDayData = {
         total: dayData.total + 1,
         correct: dayData.correct + (isCorrect ? 1 : 0),
-        reviewedWords: dayData.reviewedWords 
+        reviewedWords: dayData.reviewedWords
           ? (dayData.reviewedWords.includes(wordId) ? dayData.reviewedWords : [...dayData.reviewedWords, wordId])
           : [wordId]
       };
-      
+
       const updated = {
         ...prev,
         [todayStr]: newDayData
       };
-      
+
       localStorage.setItem('spacedrep_review_history', JSON.stringify(updated));
       return updated;
     });
@@ -217,16 +217,16 @@ export const useVocab = () => {
 
   const streak = calculateStreak(reviewHistory);
 
-  return { 
-    words, 
-    settings, 
-    addWord, 
-    updateWord, 
-    deleteWord, 
-    updateSettings, 
-    importData, 
-    reviewHistory, 
-    recordReview, 
-    streak 
+  return {
+    words,
+    settings,
+    addWord,
+    updateWord,
+    deleteWord,
+    updateSettings,
+    importData,
+    reviewHistory,
+    recordReview,
+    streak
   };
 };

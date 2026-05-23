@@ -53,7 +53,7 @@ const Settings = ({ words, settings, updateSettings, importData }) => {
   const handleImport = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
+
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
@@ -140,7 +140,7 @@ const Settings = ({ words, settings, updateSettings, importData }) => {
         <h2 style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
           <Save size={20} className="text-gradient" /> Data Management
         </h2>
-        
+
         <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
           The app automatically saves a daily backup of your data. You can also manually export or import your data.
         </p>
@@ -149,7 +149,7 @@ const Settings = ({ words, settings, updateSettings, importData }) => {
           <button onClick={handleExport} className="btn btn-outline" style={{ justifyContent: 'center' }}>
             <Download size={16} /> Export Data (Backup)
           </button>
-          
+
           <button onClick={() => fileInputRef.current.click()} className="btn btn-outline" style={{ justifyContent: 'center' }}>
             <Upload size={16} /> Import Data
           </button>

@@ -16,6 +16,22 @@
   --card-radius: 20px;
 }
 
+[data-theme="sepia"] {
+  --bg-dark: #FBF8EF;
+  --bg-darker: #EFE9D8;
+  --text-main: #4A4A4A;
+  --text-muted: #827C75;
+  --accent-primary: #C0392B; /* Đỏ gạch / Rust */
+  --accent-primary-hover: #922B21;
+  --accent-secondary: #2980B9; /* Xanh dương / Blue */
+  --accent-success: #27AE60;
+  --accent-warning: #D35400;
+  --accent-danger: #E74C3C;
+  --glass-bg: rgba(0, 0, 0, 0.03);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -142,7 +158,7 @@ p {
 
 .app-title {
   font-size: 1.4rem;
-  background: linear-gradient(135deg, #fff, #94a3b8);
+  background: linear-gradient(135deg, var(--text-main), var(--text-muted));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   display: flex;
