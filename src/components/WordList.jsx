@@ -1,16 +1,65 @@
 import { useState } from 'react';
-import { Edit2, Trash2, Save, X, Search as SearchIcon } from 'lucide-react';
+import { Edit2, Trash2, Save, X, Search as SearchIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import AddWord from './AddWord';
 
 const WordList = ({ words, updateWord, deleteWord, addWord, addWords }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ word: '', meaning: '', example: '' });
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 15;
 
   const filteredWords = words.filter(w => 
     w.word.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    w.meaning.toLowerCase().includes(searchTerm.toLowerCase())
+    (w.meaning && w.meaning.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (w.viMeaning && w.viMeaning.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  const totalItems = filteredWords.length;
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
+  const activePage = Math.min(currentPage, totalPages);
+
+  const startIndex = (activePage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedWords = filteredWords.slice(startIndex, endIndex);
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = 5;
+    
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      pages.push(1);
+      
+      let start = Math.max(2, activePage - 1);
+      let end = Math.min(totalPages - 1, activePage + 1);
+      
+      if (activePage <= 2) {
+        end = 4;
+      } else if (activePage >= totalPages - 1) {
+        start = totalPages - 3;
+      }
+      
+      if (start > 2) {
+        pages.push('...');
+      }
+      
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+      
+      if (end < totalPages - 1) {
+        pages.push('...');
+      }
+      
+      pages.push(totalPages);
+    }
+    
+    return pages;
+  };
 
   const startEdit = (word) => {
     setEditingId(word.id);
@@ -59,19 +108,19 @@ const WordList = ({ words, updateWord, deleteWord, addWord, addWords }) => {
               className="input-field" 
               placeholder="Search words..." 
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               style={{ paddingLeft: '2.2rem' }}
             />
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', overflowY: 'auto', flex: 1, minHeight: 0 }}>
-          {filteredWords.length === 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', overflowY: 'auto', flex: 1, minHeight: 0, paddingRight: '4px' }}>
+          {paginatedWords.length === 0 ? (
             <div className="glass-panel" style={{ textAlign: 'center' }}>
               <p className="text-muted">No words found.</p>
             </div>
           ) : (
-            filteredWords.map(word => (
+            paginatedWords.map(word => (
               <div key={word.id} className="glass-panel" style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', flexShrink: 0 }}>
                 {editingId === word.id ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -106,6 +155,57 @@ const WordList = ({ words, updateWord, deleteWord, addWord, addWords }) => {
             ))
           )}
         </div>
+
+        {totalPages > 1 && (
+          <div className="flex-between" style={{ padding: '0.5rem 0', borderTop: '1px solid var(--glass-border)', gap: '1rem', flexWrap: 'wrap', flexShrink: 0 }}>
+            <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+              Hiển thị <strong>{startIndex + 1}-{Math.min(endIndex, totalItems)}</strong> trên <strong>{totalItems}</strong> từ
+            </span>
+            
+            <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={activePage === 1}
+                className="btn btn-outline"
+                style={{ padding: '0.35rem 0.6rem', borderRadius: '8px', fontSize: '0.8rem' }}
+              >
+                <ChevronLeft size={14} />
+              </button>
+              
+              {getPageNumbers().map((pageNum, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => typeof pageNum === 'number' && setCurrentPage(pageNum)}
+                  disabled={pageNum === '...'}
+                  style={{
+                    background: pageNum === activePage ? 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))' : pageNum === '...' ? 'transparent' : 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--glass-border)',
+                    color: pageNum === activePage ? 'white' : 'var(--text-main)',
+                    padding: '0.35rem 0.7rem',
+                    borderRadius: '8px',
+                    cursor: pageNum === '...' ? 'default' : 'pointer',
+                    fontSize: '0.8rem',
+                    fontWeight: pageNum === activePage ? 700 : 500,
+                    minWidth: '32px',
+                    transition: 'all 0.2s ease',
+                    opacity: pageNum === '...' ? 0.6 : 1
+                  }}
+                >
+                  {pageNum}
+                </button>
+              ))}
+              
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={activePage === totalPages}
+                className="btn btn-outline"
+                style={{ padding: '0.35rem 0.6rem', borderRadius: '8px', fontSize: '0.8rem' }}
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
