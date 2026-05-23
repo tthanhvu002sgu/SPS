@@ -143,6 +143,12 @@ export const useVocab = () => {
     setWords(prev => [newWord, ...prev]);
   };
 
+  const addWords = (newWords) => {
+    if (Array.isArray(newWords) && newWords.length > 0) {
+      setWords(prev => [...newWords, ...prev]);
+    }
+  };
+
   const updateWord = (updatedWord) => {
     setWords(prev => prev.map(w => w.id === updatedWord.id ? updatedWord : w));
   };
@@ -221,6 +227,7 @@ export const useVocab = () => {
     words,
     settings,
     addWord,
+    addWords,
     updateWord,
     deleteWord,
     updateSettings,

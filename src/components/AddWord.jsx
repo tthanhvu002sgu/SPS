@@ -5,7 +5,7 @@ import { getInitialSRSData } from '../utils/srs';
 import { Search, Plus, Loader2, FileSpreadsheet } from 'lucide-react';
 import ImportExcelCSV from './ImportExcelCSV';
 
-const AddWord = ({ words = [], onAdd }) => {
+const AddWord = ({ words = [], onAdd, onAddWords }) => {
   const [activeAddTab, setActiveAddTab] = useState('manual');
   const [word, setWord] = useState('');
   const [meaning, setMeaning] = useState('');
@@ -237,7 +237,7 @@ const AddWord = ({ words = [], onAdd }) => {
           </button>
         </form>
       ) : (
-        <ImportExcelCSV words={words} onAdd={onAdd} onCloseTab={() => setActiveAddTab('manual')} />
+        <ImportExcelCSV words={words} onAdd={onAdd} onAddWords={onAddWords} onCloseTab={() => setActiveAddTab('manual')} />
       )}
       
       <style dangerouslySetInnerHTML={{__html:`

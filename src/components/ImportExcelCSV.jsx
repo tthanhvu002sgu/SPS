@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
@@ -14,7 +14,11 @@ import {
   Loader2, 
   Search, 
   Trash2, 
-  Info 
+  Info,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react';
 
 const WORD_HEADERS = ['word', 'từ', 'từ vựng', 'vocab', 'term'];
@@ -23,7 +27,7 @@ const MEANING_HEADERS = ['meaning', 'english', 'definition', 'định nghĩa', '
 const PHONETIC_HEADERS = ['phonetic', 'pronunciation', 'phiên âm', 'phát âm', 'ipa'];
 const EXAMPLE_HEADERS = ['example', 'sentence', 'ví dụ', 'câu ví dụ', 'câu'];
 
-const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
+const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
   const [parsedWords, setParsedWords] = useState([]);
   const [selectedWordIds, setSelectedWordIds] = useState(new Set());
   const [isDragOver, setIsDragOver] = useState(false);
@@ -31,6 +35,10 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
   const [autoFetch, setAutoFetch] = useState(true);
   const [skipDuplicates, setSkipDuplicates] = useState(true);
   
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 30;
+
   // Progress states
   const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, activeWord: '' });
@@ -38,6 +46,11 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
   const [error, setError] = useState('');
 
   const fileInputRef = useRef(null);
+
+  // Reset page to 1 when filters or search terms change to prevent empty renders
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, autoFetch, skipDuplicates, parsedWords.length]);
 
   // Helper APIs from AddWord
   const translateToVi = async (text) => {
@@ -251,13 +264,13 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
     });
   };
 
-  // Select all / Deselect all
-  const handleSelectAll = (filteredItems) => {
-    const allSelected = filteredItems.every(item => selectedWordIds.has(item.id));
+  // Select all / Deselect all on filtered items
+  const handleSelectAll = (itemsToToggle) => {
+    const allSelected = itemsToToggle.every(item => selectedWordIds.has(item.id));
     
     setSelectedWordIds(prev => {
       const next = new Set(prev);
-      filteredItems.forEach(item => {
+      itemsToToggle.forEach(item => {
         if (allSelected) {
           next.delete(item.id);
         } else {
@@ -268,14 +281,20 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
     });
   };
 
-  // Filter parsed items based on search input
-  const filteredItems = parsedWords.filter(item => 
-    item.word.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    item.viMeaning.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.meaning.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filter parsed items based on search input and duplication filter if checked
+  const filteredItems = parsedWords.filter(item => {
+    const matchesSearch = item.word.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          item.viMeaning.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          item.meaning.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesSearch;
+  });
 
-  // Bulk import execution
+  // Calculate pagination details
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedItems = filteredItems.slice(startIndex, startIndex + itemsPerPage);
+
+  // Bulk import execution with single state update at the end
   const executeImport = async () => {
     const toImport = parsedWords.filter(item => selectedWordIds.has(item.id));
     if (toImport.length === 0) return;
@@ -285,6 +304,9 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
     
     let addedCount = 0;
     let duplicateSkipped = 0;
+    
+    // A temporary list to collect all new words before committing to the parent state (adds huge performance!)
+    const wordsToInsert = [];
     
     for (let i = 0; i < toImport.length; i++) {
       const currentItem = toImport[i];
@@ -336,13 +358,22 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
         dateAdded: new Date().getTime()
       };
 
-      // Add to Vocab state
-      onAdd(newWordObj);
+      wordsToInsert.push(newWordObj);
       addedCount++;
 
       // Small delay between words if fetching APIs to respect rate limits
       if (autoFetch && i < toImport.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+    }
+
+    // Call onAddWords with all collected items once! (Prevents React loop re-renders)
+    if (wordsToInsert.length > 0) {
+      if (onAddWords) {
+        onAddWords(wordsToInsert);
+      } else {
+        // Fallback if prop is not set
+        wordsToInsert.forEach(w => onAdd(w));
       }
     }
 
@@ -473,7 +504,7 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
           </div>
           {autoFetch && (
             <p className="text-muted" style={{ fontSize: '0.75rem', fontStyle: 'italic' }}>
-              * Đang tự động tra cứu từ điển và dịch thuật. Tiến trình có thể mất vài giây.
+              * Đang tự động dịch nghĩa và tra từ điển. Tiến trình có thể mất một lúc tùy số lượng từ.
             </p>
           )}
         </div>
@@ -513,7 +544,7 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
           <div className="glass-panel" style={{ padding: '0.75rem 1rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <FileSpreadsheet className="text-gradient" size={20} />
-              <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>Xem trước dữ liệu ({parsedWords.length} từ)</span>
+              <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>Xem trước dữ liệu ({filteredItems.length}/{parsedWords.length} từ)</span>
             </div>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -534,7 +565,7 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
                   onChange={e => setSkipDuplicates(e.target.checked)} 
                   style={{ cursor: 'pointer' }}
                 />
-                Bỏ qua từ đã có
+                Bỏ qua từ trùng
               </label>
 
               <div style={{ position: 'relative', width: '160px' }}>
@@ -558,7 +589,7 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
             overflowY: 'auto', 
             flex: 1, 
             minHeight: 0, 
-            gap: '0.5rem',
+            gap: '0.25rem',
             background: 'var(--glass-bg)',
             border: '1px solid var(--glass-border)',
             borderRadius: '12px',
@@ -566,7 +597,7 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
           }}>
             <div style={{ 
               display: 'grid', 
-              gridTemplateColumns: '40px 1.5fr 1fr 2fr 1fr 40px',
+              gridTemplateColumns: '40px 1.5fr 1fr 2.2fr 1.2fr 40px',
               padding: '0.5rem 0.75rem',
               fontWeight: 600,
               fontSize: '0.8rem',
@@ -587,23 +618,23 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
               <div></div>
             </div>
 
-            {filteredItems.length === 0 ? (
+            {paginatedItems.length === 0 ? (
               <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                 Không tìm thấy kết quả lọc.
               </div>
             ) : (
-              filteredItems.map(item => (
+              paginatedItems.map(item => (
                 <div 
                   key={item.id} 
                   style={{ 
                     display: 'grid', 
-                    gridTemplateColumns: '40px 1.5fr 1fr 2fr 1fr 40px',
-                    padding: '0.6rem 0.75rem',
+                    gridTemplateColumns: '40px 1.5fr 1fr 2.2fr 1.2fr 40px',
+                    padding: '0.5rem 0.75rem',
                     fontSize: '0.85rem',
                     alignItems: 'center',
                     borderRadius: '8px',
                     background: item.isDuplicate ? 'rgba(245, 158, 11, 0.03)' : 'rgba(255,255,255,0.01)',
-                    border: item.isDuplicate ? '1px solid rgba(245, 158, 11, 0.15)' : '1px solid transparent',
+                    border: item.isDuplicate ? '1px solid rgba(245, 158, 11, 0.12)' : '1px solid transparent',
                     transition: 'all 0.15s ease'
                   }}
                 >
@@ -620,14 +651,14 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
                     {item.phonetic || <span style={{ fontStyle: 'italic', fontSize: '0.75rem' }}>tự tra cứu</span>}
                   </div>
                   
-                  <div>
+                  <div style={{ overflow: 'hidden' }}>
                     {item.viMeaning && (
-                      <div style={{ fontWeight: 600, color: 'var(--accent-warning)', fontSize: '0.8rem', marginBottom: '0.1rem' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--accent-warning)', fontSize: '0.8rem', marginBottom: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {item.viMeaning}
                       </div>
                     )}
                     {item.meaning && (
-                      <div style={{ fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
                         {item.meaning}
                       </div>
                     )}
@@ -645,11 +676,11 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
                         fontSize: '0.7rem', 
                         fontWeight: 600,
                         color: 'var(--accent-warning)', 
-                        background: 'rgba(245,158,11,0.1)', 
-                        padding: '0.2rem 0.5rem', 
+                        background: 'rgba(245,158,11,0.08)', 
+                        padding: '0.15rem 0.45rem', 
                         borderRadius: '999px' 
                       }}>
-                        <AlertTriangle size={10} /> Trùng lặp
+                        <AlertTriangle size={10} /> Đã có sẵn
                       </span>
                     ) : (
                       <span style={{ 
@@ -659,8 +690,8 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
                         fontSize: '0.7rem', 
                         fontWeight: 600,
                         color: 'var(--accent-success)', 
-                        background: 'rgba(16,185,129,0.1)', 
-                        padding: '0.2rem 0.5rem', 
+                        background: 'rgba(16,185,129,0.08)', 
+                        padding: '0.15rem 0.45rem', 
                         borderRadius: '999px' 
                       }}>
                         <CheckCircle size={10} /> Sẵn sàng
@@ -687,8 +718,68 @@ const ImportExcelCSV = ({ words = [], onAdd, onCloseTab }) => {
             )}
           </div>
 
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              gap: '0.5rem', 
+              padding: '0.5rem', 
+              background: 'var(--glass-bg)', 
+              border: '1px solid var(--glass-border)', 
+              borderRadius: '12px' 
+            }}>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="btn btn-outline"
+                style={{ padding: '0.35rem', borderRadius: '8px' }}
+                title="Trang đầu"
+              >
+                <ChevronsLeft size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="btn btn-outline"
+                style={{ padding: '0.35rem', borderRadius: '8px' }}
+                title="Trang trước"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              
+              <span style={{ fontSize: '0.8rem', padding: '0 0.5rem', fontWeight: 500 }}>
+                Trang {currentPage} / {totalPages}
+              </span>
+              
+              <button
+                type="button"
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="btn btn-outline"
+                style={{ padding: '0.35rem', borderRadius: '8px' }}
+                title="Trang sau"
+              >
+                <ChevronRight size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="btn btn-outline"
+                style={{ padding: '0.35rem', borderRadius: '8px' }}
+                title="Trang cuối"
+              >
+                <ChevronsRight size={14} />
+              </button>
+            </div>
+          )}
+
           {/* Actions Bar */}
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.25rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.1rem' }}>
             <button 
               onClick={() => {
                 setParsedWords([]);

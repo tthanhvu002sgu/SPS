@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Edit2, Trash2, Save, X, Search as SearchIcon } from 'lucide-react';
 import AddWord from './AddWord';
 
-const WordList = ({ words, updateWord, deleteWord, addWord }) => {
+const WordList = ({ words, updateWord, deleteWord, addWord, addWords }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ word: '', meaning: '', example: '' });
@@ -44,7 +44,7 @@ const WordList = ({ words, updateWord, deleteWord, addWord }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '0.75rem', overflow: 'hidden' }}>
-      <AddWord words={words} onAdd={addWord} />
+      <AddWord words={words} onAdd={addWord} onAddWords={addWords} />
       
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '0.75rem' }}>
         <div className="flex-between">

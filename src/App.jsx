@@ -10,6 +10,7 @@ function App() {
     words, 
     settings, 
     addWord, 
+    addWords,
     updateWord, 
     updateSettings, 
     deleteWord, 
@@ -73,7 +74,7 @@ function App() {
       </header>
 
       <main className="main-container">
-        {activeTab === 'library' && <WordList words={words} updateWord={updateWord} deleteWord={deleteWord} addWord={addWord} />}
+        {activeTab === 'library' && <WordList words={words} updateWord={updateWord} deleteWord={deleteWord} addWord={addWord} addWords={addWords} />}
         {activeTab === 'study' && (
           <StudySession 
             words={words} 
