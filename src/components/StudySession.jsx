@@ -10,8 +10,12 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
   const [isFlipped, setIsFlipped] = useState(false);
   const [sessionComplete, setSessionComplete] = useState(false);
   const [practiceMode, setPracticeMode] = useState(false);
+  const [isStudying, setIsStudying] = useState(false);
 
+  // Initialize queue when isStudying becomes true or practiceMode/words changes
   useEffect(() => {
+    if (!isStudying) return;
+
     if (practiceMode) {
       // In practice mode, queue all words
       const shuffled = [...words].sort(() => 0.5 - Math.random());
@@ -47,7 +51,14 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
     } else {
       setSessionComplete(true);
     }
-  }, [words, settings.dailyLimit, practiceMode]);
+  }, [isStudying, words, settings.dailyLimit, practiceMode]);
+
+  const handleExitSession = () => {
+    setIsStudying(false);
+    setSessionComplete(false);
+    setCurrentWord(null);
+    setQueue([]);
+  };
 
   const handleFlip = () => {
     setIsFlipped(true);
@@ -137,17 +148,162 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
     }
   }, [isActive, currentWord, sessionComplete, speakWord]);
 
+  if (!isStudying) {
+    const today = new Date().setHours(0,0,0,0);
+    const reviewedCount = words.filter(w => w.isReviewedToday).length;
+    const remainingQuota = Math.max(0, settings.dailyLimit - reviewedCount);
+    let dueWords = words.filter(w => w.nextReviewDate <= today && !w.isReviewedToday);
+    const dueCount = Math.min(dueWords.length, remainingQuota);
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '1rem', overflowY: 'auto', paddingBottom: '1.5rem' }}>
+        {/* Full Dashboard Stats & Chart */}
+        <Dashboard words={words} streak={streak} reviewHistory={reviewHistory} compact={false} />
+
+        {/* Study Goal Card */}
+        <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
+              Mục tiêu học tập hôm nay
+            </h3>
+            <p className="text-muted" style={{ fontSize: '0.85rem' }}>
+              Hãy chọn chế độ học và bắt đầu ôn tập để duy trì streak của bạn nhé!
+            </p>
+          </div>
+
+          {/* Mode Switcher Buttons */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'rgba(0,0,0,0.15)', padding: '0.25rem', borderRadius: '12px' }}>
+            <button
+              onClick={() => setPracticeMode(false)}
+              style={{
+                border: 'none',
+                background: !practiceMode ? 'var(--glass-bg)' : 'transparent',
+                color: !practiceMode ? 'var(--text-main)' : 'var(--text-muted)',
+                padding: '0.6rem',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4rem',
+                transition: 'all 0.2s ease',
+                boxShadow: !practiceMode ? '0 2px 8px rgba(0,0,0,0.2)' : 'none'
+              }}
+            >
+              <span>○ SRS Mode (Hàng ngày)</span>
+            </button>
+            <button
+              onClick={() => setPracticeMode(true)}
+              style={{
+                border: 'none',
+                background: practiceMode ? 'var(--glass-bg)' : 'transparent',
+                color: practiceMode ? 'var(--text-main)' : 'var(--text-muted)',
+                padding: '0.6rem',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4rem',
+                transition: 'all 0.2s ease',
+                boxShadow: practiceMode ? '0 2px 8px rgba(0,0,0,0.2)' : 'none'
+              }}
+            >
+              <span>● Practice Mode (Tự do)</span>
+            </button>
+          </div>
+
+          {/* Session Info & Summary */}
+          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', padding: '1rem', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(59, 130, 246, 0.1))', color: 'var(--accent-primary)', padding: '0.75rem', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Brain size={24} />
+            </div>
+            <div style={{ flex: 1 }}>
+              {!practiceMode ? (
+                <>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>
+                    {dueCount > 0 ? (
+                      <>Hôm nay bạn có <span style={{ color: 'var(--accent-primary)', fontWeight: '800' }}>{dueCount}</span> từ cần ôn tập.</>
+                    ) : (
+                      <span style={{ color: 'var(--accent-success)' }}>Tuyệt vời! Bạn đã hoàn thành tất cả từ vựng hôm nay.</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                    {dueCount > 0 ? "Từ vựng được lựa chọn dựa trên thuật toán lặp lại ngắt quãng (SRS)." : "Hãy chuyển sang Practice Mode để ôn luyện thêm."}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>
+                    Luyện tập tự do với <span style={{ color: 'var(--accent-primary)', fontWeight: '800' }}>{words.length}</span> từ vựng hiện có.
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                    Chế độ này không giới hạn số lượng và không ảnh hưởng đến lịch ôn tập SRS hàng ngày.
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Big CTA Start Button */}
+          <button
+            onClick={() => setIsStudying(true)}
+            disabled={!practiceMode && dueCount === 0}
+            className="btn btn-primary"
+            style={{
+              padding: '0.9rem',
+              fontSize: '1rem',
+              fontWeight: 700,
+              letterSpacing: '0.5px',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              background: (!practiceMode && dueCount === 0) ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
+              color: (!practiceMode && dueCount === 0) ? 'var(--text-muted)' : 'white',
+              cursor: (!practiceMode && dueCount === 0) ? 'not-allowed' : 'pointer',
+              border: 'none',
+              boxShadow: (!practiceMode && dueCount === 0) ? 'none' : '0 4px 15px rgba(139, 92, 246, 0.3)',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            BẮT ĐẦU HỌC
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '0.75rem', overflow: 'hidden' }}>
-      <Dashboard words={words} streak={streak} reviewHistory={reviewHistory} compact={true} />
-      
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <button 
-          onClick={() => setPracticeMode(!practiceMode)}
-          className={`btn ${practiceMode ? 'btn-primary' : 'btn-outline'}`}
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '1rem', overflow: 'hidden' }}>
+      {/* Active Session Header */}
+      <div className="glass-panel" style={{ padding: '0.6rem 1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+        <button
+          onClick={handleExitSession}
+          className="btn btn-outline"
+          style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', borderRadius: '8px' }}
         >
-          {practiceMode ? '● Practice Mode (All Words)' : '○ SRS Mode (Due Words)'}
+          <span>← Quay lại Dashboard</span>
         </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            color: 'var(--text-muted)',
+            background: 'rgba(255,255,255,0.04)',
+            padding: '0.25rem 0.6rem',
+            borderRadius: '999px',
+            border: '1px solid var(--glass-border)'
+          }}>
+            {practiceMode ? 'Practice Mode' : 'SRS Mode'}
+          </span>
+        </div>
       </div>
 
       {sessionComplete ? (
@@ -155,17 +311,20 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
           <div style={{ background: 'rgba(16,185,129,0.1)', color: 'var(--accent-success)', padding: '1.5rem', borderRadius: '50%', marginBottom: '1rem' }}>
             <Coffee size={48} />
           </div>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>All Done!</h2>
-          <p className="text-muted" style={{ fontSize: '0.9rem', maxWidth: '380px' }}>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Tuyệt vời!</h2>
+          <p className="text-muted" style={{ fontSize: '0.9rem', maxWidth: '380px', marginBottom: '1.5rem' }}>
             {practiceMode 
-              ? "You've practiced all your words! Great job." 
-              : "All scheduled words reviewed. Come back later, or switch to Practice Mode."}
+              ? "Bạn đã hoàn thành phiên luyện tập tự do!" 
+              : "Bạn đã hoàn thành tất cả các từ cần ôn tập của hôm nay!"}
           </p>
+          <button onClick={handleExitSession} className="btn btn-primary" style={{ padding: '0.6rem 1.5rem', borderRadius: '8px' }}>
+            Về Dashboard
+          </button>
         </div>
       ) : currentWord ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', flex: 1, minHeight: 0, overflow: 'hidden' }}>
           <div style={{ background: 'var(--glass-bg)', padding: '0.3rem 1rem', borderRadius: '999px', border: '1px solid var(--glass-border)', fontSize: '0.85rem' }}>
-            Remaining: <strong className="text-gradient">{queue.length}</strong>
+            Còn lại: <strong className="text-gradient">{queue.length}</strong> từ
           </div>
 
           <div className="flashcard-container" onClick={!isFlipped ? handleFlip : undefined}>

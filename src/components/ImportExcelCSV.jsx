@@ -294,7 +294,7 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedItems = filteredItems.slice(startIndex, startIndex + itemsPerPage);
 
-  // Bulk import execution with single state update at the end
+  // Bulk import execution with incremental saving
   const executeImport = async () => {
     const toImport = parsedWords.filter(item => selectedWordIds.has(item.id));
     if (toImport.length === 0) return;
@@ -305,17 +305,18 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
     let addedCount = 0;
     let duplicateSkipped = 0;
     
-    // A temporary list to collect all new words before committing to the parent state (adds huge performance!)
-    const wordsToInsert = [];
+    // Keep track of words added during this execution to prevent duplicates due to React closure scope
+    const addedDuringThisImport = new Set();
     
     for (let i = 0; i < toImport.length; i++) {
       const currentItem = toImport[i];
       setProgress({ current: i + 1, total: toImport.length, activeWord: currentItem.word });
 
-      // Final check for duplicates against the live library if user wanted to skip duplicates
+      // Final check for duplicates against the live library and words added in this batch
+      const isAlreadyAdded = addedDuringThisImport.has(currentItem.word.trim().toLowerCase());
       const isLiveDuplicate = words.some(existing => 
         existing.word.trim().toLowerCase() === currentItem.word.toLowerCase()
-      );
+      ) || isAlreadyAdded;
 
       if (isLiveDuplicate && skipDuplicates) {
         duplicateSkipped++;
@@ -358,22 +359,14 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
         dateAdded: new Date().getTime()
       };
 
-      wordsToInsert.push(newWordObj);
+      // Add to system immediately
+      onAdd(newWordObj);
+      addedDuringThisImport.add(currentItem.word.trim().toLowerCase());
       addedCount++;
 
       // Small delay between words if fetching APIs to respect rate limits
       if (autoFetch && i < toImport.length - 1) {
         await new Promise(resolve => setTimeout(resolve, 200));
-      }
-    }
-
-    // Call onAddWords with all collected items once! (Prevents React loop re-renders)
-    if (wordsToInsert.length > 0) {
-      if (onAddWords) {
-        onAddWords(wordsToInsert);
-      } else {
-        // Fallback if prop is not set
-        wordsToInsert.forEach(w => onAdd(w));
       }
     }
 
