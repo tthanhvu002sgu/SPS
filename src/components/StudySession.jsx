@@ -11,6 +11,17 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
   const [sessionComplete, setSessionComplete] = useState(false);
   const [practiceMode, setPracticeMode] = useState(false);
   const [isStudying, setIsStudying] = useState(false);
+  const [randomFrontBack, setRandomFrontBack] = useState(false);
+  const [showReverse, setShowReverse] = useState(false);
+
+  // Set random orientation when currentWord changes
+  useEffect(() => {
+    if (currentWord && randomFrontBack) {
+      setShowReverse(Math.random() < 0.5);
+    } else {
+      setShowReverse(false);
+    }
+  }, [currentWord, randomFrontBack]);
 
   // Initialize queue when isStudying becomes true or practiceMode/words changes
   useEffect(() => {
@@ -118,7 +129,9 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
       if (sessionComplete || !currentWord) return;
 
       if (e.key === 'Control') {
-        speakWord(currentWord.word);
+        if (!showReverse || isFlipped) {
+          speakWord(currentWord.word);
+        }
         return;
       }
 
@@ -140,13 +153,19 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isActive, isFlipped, sessionComplete, currentWord, queue, practiceMode, settings, handleGrade, speakWord]);
+  }, [isActive, isFlipped, sessionComplete, currentWord, queue, practiceMode, settings, handleGrade, speakWord, showReverse]);
 
   useEffect(() => {
-    if (isActive && currentWord && !sessionComplete) {
+    if (isActive && currentWord && !sessionComplete && !showReverse) {
       speakWord(currentWord.word);
     }
-  }, [isActive, currentWord, sessionComplete, speakWord]);
+  }, [isActive, currentWord, sessionComplete, speakWord, showReverse]);
+
+  useEffect(() => {
+    if (isActive && currentWord && !sessionComplete && showReverse && isFlipped) {
+      speakWord(currentWord.word);
+    }
+  }, [isActive, currentWord, sessionComplete, showReverse, isFlipped, speakWord]);
 
   if (!isStudying) {
     const today = new Date().setHours(0,0,0,0);
@@ -249,6 +268,43 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
             </div>
           </div>
 
+          {/* Settings Options */}
+          <div style={{
+            background: 'rgba(255,255,255,0.02)',
+            padding: '0.75rem 1rem',
+            borderRadius: '12px',
+            border: '1px solid var(--glass-border)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            cursor: 'pointer',
+            userSelect: 'none'
+          }} onClick={() => setRandomFrontBack(prev => !prev)}>
+            <input 
+              type="checkbox" 
+              checked={randomFrontBack} 
+              onChange={(e) => {
+                e.stopPropagation();
+                setRandomFrontBack(e.target.checked);
+              }}
+              style={{
+                width: '18px',
+                height: '18px',
+                borderRadius: '4px',
+                accentColor: 'var(--accent-primary)',
+                cursor: 'pointer'
+              }}
+            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                Xáo trộn mặt Thẻ (Mặt trước ↔ Mặt sau)
+              </span>
+              <span className="text-muted" style={{ fontSize: '0.75rem' }}>
+                Học ngẫu nhiên từ Anh ➔ Việt và Việt ➔ Anh để tăng độ nhớ từ vựng.
+              </span>
+            </div>
+          </div>
+
           {/* Big CTA Start Button */}
           <button
             onClick={() => setIsStudying(true)}
@@ -329,33 +385,81 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
 
           <div className="flashcard-container" onClick={!isFlipped ? handleFlip : undefined}>
             <div className={`flashcard ${isFlipped ? 'flipped' : ''}`}>
+              {/* Front side of the card */}
               <div className="flashcard-front">
                 <p className="text-muted" style={{ position: 'absolute', top: '1rem', textTransform: 'uppercase', letterSpacing: '2px', fontSize: '0.7rem' }}>Tap or Space to flip</p>
                 
-                <button 
-                  onClick={(e) => speakWord(currentWord.word, e)} 
-                  className="btn btn-outline" 
-                  style={{ position: 'absolute', top: '1rem', right: '1rem', padding: '0.4rem', borderRadius: '50%', border: 'none' }}
-                  title="Listen"
-                >
-                  <Volume2 size={20} className="text-muted" />
-                </button>
+                {/* Active Mode Badge */}
+                <div style={{
+                  position: 'absolute',
+                  top: '2.5rem',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: showReverse ? 'rgba(245, 158, 11, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                  border: showReverse ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(59, 130, 246, 0.3)',
+                  color: showReverse ? 'var(--accent-warning)' : 'var(--accent-primary)',
+                  padding: '0.2rem 0.75rem',
+                  borderRadius: '999px',
+                  fontSize: '0.65rem',
+                  fontWeight: 700,
+                  letterSpacing: '1px',
+                  textTransform: 'uppercase',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {showReverse ? 'Đoán từ Tiếng Anh' : 'Đoán nghĩa Tiếng Việt'}
+                </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                  <h1 className="word-large text-gradient" style={{ marginBottom: 0 }}>{currentWord.word}</h1>
-                  {currentWord.phonetic && <p className="text-muted" style={{ fontSize: '1.2rem', fontFamily: 'monospace' }}>{currentWord.phonetic}</p>}
+                {!showReverse && (
+                  <button 
+                    onClick={(e) => speakWord(currentWord.word, e)} 
+                    className="btn btn-outline" 
+                    style={{ position: 'absolute', top: '1rem', right: '1rem', padding: '0.4rem', borderRadius: '50%', border: 'none' }}
+                    title="Listen"
+                  >
+                    <Volume2 size={20} className="text-muted" />
+                  </button>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', marginTop: '1.5rem', width: '100%' }}>
+                  <h1 className="word-large text-gradient" style={{ marginBottom: 0, fontSize: showReverse ? '2rem' : '3rem', wordBreak: 'break-word', lineHeight: '1.2' }}>
+                    {showReverse ? (currentWord.viMeaning || currentWord.meaning) : currentWord.word}
+                  </h1>
+                  {!showReverse && currentWord.phonetic && (
+                    <p className="text-muted" style={{ fontSize: '1.2rem', fontFamily: 'monospace' }}>{currentWord.phonetic}</p>
+                  )}
                 </div>
               </div>
               
+              {/* Back side of the card */}
               <div className="flashcard-back">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                {/* Active Mode Badge on Back */}
+                <div style={{
+                  position: 'absolute',
+                  top: '1rem',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  color: 'var(--accent-success)',
+                  padding: '0.15rem 0.6rem',
+                  borderRadius: '999px',
+                  fontSize: '0.65rem',
+                  fontWeight: 700,
+                  letterSpacing: '1px',
+                  textTransform: 'uppercase'
+                }}>
+                  Đáp án
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', marginTop: '1.5rem' }}>
                   <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: 0 }}>{currentWord.word}</h1>
-                  <button onClick={(e) => speakWord(currentWord.word, e)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                  <button onClick={(e) => speakWord(currentWord.word, e)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }} title="Listen">
                     <Volume2 size={22} />
                   </button>
                 </div>
                 {currentWord.phonetic && <p className="text-muted" style={{ fontSize: '1.1rem', fontFamily: 'monospace', marginBottom: '0.5rem' }}>{currentWord.phonetic}</p>}
                 <div style={{ width: '40px', height: '3px', background: 'var(--accent-primary)', margin: '0.5rem 0', borderRadius: '2px' }}></div>
+                
                 {currentWord.viMeaning && <p style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--accent-warning)', marginBottom: '0.25rem' }}>{currentWord.viMeaning}</p>}
                 <p className="word-meaning">{currentWord.meaning}</p>
                 {currentWord.example && <p className="word-example">"{currentWord.example}"</p>}
