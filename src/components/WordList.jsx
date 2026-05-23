@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Edit2, Trash2, Save, X, Search as SearchIcon } from 'lucide-react';
 import AddWord from './AddWord';
 
@@ -44,7 +44,7 @@ const WordList = ({ words, updateWord, deleteWord, addWord }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '0.75rem', overflow: 'hidden' }}>
-      <AddWord onAdd={addWord} />
+      <AddWord words={words} onAdd={addWord} />
       
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '0.75rem' }}>
         <div className="flex-between">

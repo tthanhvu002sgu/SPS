@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { getInitialSRSData } from '../utils/srs';
 import { Search, Plus, Loader2 } from 'lucide-react';
 
-const AddWord = ({ onAdd }) => {
+const AddWord = ({ words = [], onAdd }) => {
   const [word, setWord] = useState('');
   const [meaning, setMeaning] = useState('');
   const [viMeaning, setViMeaning] = useState('');
@@ -74,9 +74,37 @@ const AddWord = ({ onAdd }) => {
       return;
     }
 
+    const duplicates = [];
+    const uniqueWordsToAdd = [];
+
+    for (const w of wordsToAdd) {
+      const isDuplicate = words.some(existingWord => 
+        existingWord.word.trim().toLowerCase() === w.toLowerCase()
+      );
+      const isAlreadyInUniqueList = uniqueWordsToAdd.some(uniqueW => 
+        uniqueW.toLowerCase() === w.toLowerCase()
+      );
+
+      if (isDuplicate || isAlreadyInUniqueList) {
+        duplicates.push(w);
+      } else {
+        uniqueWordsToAdd.push(w);
+      }
+    }
+
+    if (duplicates.length > 0 && uniqueWordsToAdd.length === 0) {
+      setError(
+        duplicates.length === 1 
+          ? `Word "${duplicates[0]}" already exists in your library!` 
+          : `Words already exist: ${duplicates.map(d => `"${d}"`).join(', ')}`
+      );
+      setIsLoading(false);
+      return;
+    }
+
     let addedCount = 0;
 
-    for (const currentWord of wordsToAdd) {
+    for (const currentWord of uniqueWordsToAdd) {
       let finalMeaning = meaning.trim();
       let finalViMeaning = viMeaning.trim();
       let finalExample = example.trim();
@@ -111,10 +139,14 @@ const AddWord = ({ onAdd }) => {
       addedCount++;
     }
     
-    if (wordsToAdd.length === 1) {
-      setSuccess(`Successfully added "${wordsToAdd[0]}"!`);
+    if (uniqueWordsToAdd.length === 1) {
+      setSuccess(`Successfully added "${uniqueWordsToAdd[0]}"!`);
     } else {
       setSuccess(`Successfully added ${addedCount} words!`);
+    }
+
+    if (duplicates.length > 0) {
+      setError(`Skipped duplicate word(s): ${duplicates.map(d => `"${d}"`).join(', ')}`);
     }
     
     setWord('');
