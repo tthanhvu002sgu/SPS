@@ -2,7 +2,7 @@ import { useState } from 'react';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { getInitialSRSData } from '../utils/srs';
-import { Search, Plus, Loader2, FileSpreadsheet } from 'lucide-react';
+import { Search, Plus, Loader2, FileSpreadsheet, Zap } from 'lucide-react';
 import ImportExcelCSV from './ImportExcelCSV';
 
 const AddWord = ({ words = [], onAdd, onAddWords }) => {
@@ -11,6 +11,7 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
   const [meaning, setMeaning] = useState('');
   const [viMeaning, setViMeaning] = useState('');
   const [example, setExample] = useState('');
+  const [quickText, setQuickText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -160,15 +161,136 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
     setTimeout(() => setSuccess(''), 3000);
   };
 
+  const handleQuickAddSubmit = async (e) => {
+    e.preventDefault();
+    if (!quickText.trim()) return;
+
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+
+    const lines = quickText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    
+    if (lines.length === 0) {
+      setIsLoading(false);
+      return;
+    }
+
+    const parsedWords = [];
+    for (const line of lines) {
+      const colonIndex = line.indexOf(':');
+      let w = '';
+      let translation = '';
+      if (colonIndex !== -1) {
+        w = line.substring(0, colonIndex).trim();
+        translation = line.substring(colonIndex + 1).trim();
+      } else {
+        w = line.trim();
+      }
+
+      if (w) {
+        parsedWords.push({ word: w, viMeaning: translation });
+      }
+    }
+
+    if (parsedWords.length === 0) {
+      setIsLoading(false);
+      return;
+    }
+
+    const duplicates = [];
+    const uniqueWords = [];
+
+    for (const item of parsedWords) {
+      const isDuplicate = words.some(existingWord => 
+        existingWord.word.trim().toLowerCase() === item.word.toLowerCase()
+      );
+      const isAlreadyInUniqueList = uniqueWords.some(uniqueW => 
+        uniqueW.word.toLowerCase() === item.word.toLowerCase()
+      );
+
+      if (isDuplicate || isAlreadyInUniqueList) {
+        duplicates.push(item.word);
+      } else {
+        uniqueWords.push(item);
+      }
+    }
+
+    if (duplicates.length > 0 && uniqueWords.length === 0) {
+      setError(
+        duplicates.length === 1 
+          ? `Từ "${duplicates[0]}" đã tồn tại trong thư viện!` 
+          : `Các từ đã tồn tại: ${duplicates.map(d => `"${d}"`).join(', ')}`
+      );
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const newWordsList = await Promise.all(uniqueWords.map(async (item) => {
+        let finalMeaning = '';
+        let finalViMeaning = item.viMeaning;
+        let finalExample = '';
+        let finalPhonetic = '';
+
+        const dictData = await fetchFromDictionary(item.word);
+        if (dictData) {
+          finalMeaning = dictData.fetchedMeaning;
+          finalExample = dictData.fetchedExample;
+          finalPhonetic = dictData.fetchedPhonetic;
+        }
+
+        if (!finalViMeaning) {
+          finalViMeaning = await translateToVi(item.word);
+        }
+
+        return {
+          id: uuidv4(),
+          word: item.word,
+          phonetic: finalPhonetic,
+          meaning: finalMeaning,
+          viMeaning: finalViMeaning,
+          example: finalExample,
+          ...getInitialSRSData(),
+          dateAdded: new Date().getTime()
+        };
+      }));
+
+      if (onAddWords) {
+        onAddWords(newWordsList);
+      } else {
+        newWordsList.forEach(w => onAdd(w));
+      }
+
+      setSuccess(`Đã thêm thành công ${newWordsList.length} từ vựng!`);
+      if (duplicates.length > 0) {
+        setError(`Bỏ qua ${duplicates.length} từ trùng lặp: ${duplicates.join(', ')}`);
+      }
+      setQuickText('');
+    } catch (err) {
+      console.error(err);
+      setError('Đã xảy ra lỗi khi thêm từ vựng. Vui lòng thử lại!');
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setSuccess(''), 4000);
+    }
+  };
+
   return (
     <div className="glass-panel" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
         <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.95rem', margin: 0, fontWeight: 600 }}>
-          {activeAddTab === 'manual' ? (
+          {activeAddTab === 'manual' && (
             <>
               <Plus size={16} className="text-gradient" /> Thêm từ mới
             </>
-          ) : (
+          )}
+          {activeAddTab === 'quick' && (
+            <>
+              <Zap size={16} className="text-gradient" /> Thêm nhanh (từ gốc: dịch)
+            </>
+          )}
+          {activeAddTab === 'upload' && (
             <>
               <FileSpreadsheet size={16} className="text-gradient" /> Nhập từ Excel / CSV
             </>
@@ -197,6 +319,29 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
             <Plus size={11} />
             Thêm thủ công
           </button>
+          
+          <button
+            type="button"
+            onClick={() => setActiveAddTab('quick')}
+            style={{
+              border: 'none',
+              background: activeAddTab === 'quick' ? 'var(--glass-bg)' : 'transparent',
+              color: activeAddTab === 'quick' ? 'var(--text-main)' : 'var(--text-muted)',
+              padding: '0.25rem 0.6rem',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '0.75rem',
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <Zap size={11} />
+            Thêm nhanh
+          </button>
+          
           <button
             type="button"
             onClick={() => setActiveAddTab('upload')}
@@ -221,7 +366,7 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
         </div>
       </div>
       
-      {activeAddTab === 'manual' ? (
+      {activeAddTab === 'manual' && (
         <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
           <input type="text" className="input-field" value={word} onChange={e => setWord(e.target.value)} placeholder="Từ vựng (phân tách bằng dấu phẩy nếu thêm nhiều từ) *" required />
           <input type="text" className="input-field" value={viMeaning} onChange={e => setViMeaning(e.target.value)} placeholder="Nghĩa tiếng Việt (tự dịch nếu để trống)" />
@@ -236,7 +381,36 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
             {isLoading ? 'Đang xử lý...' : 'Thêm từ vựng'}
           </button>
         </form>
-      ) : (
+      )}
+
+      {activeAddTab === 'quick' && (
+        <form onSubmit={handleQuickAddSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <textarea
+              className="input-field"
+              value={quickText}
+              onChange={e => setQuickText(e.target.value)}
+              placeholder="Nhập từ vựng định dạng 'từ gốc: dịch' (mỗi từ một dòng)&#10;Ví dụ:&#10;hello: xin chào&#10;apple: quả táo&#10;beautiful: xinh đẹp&#10;championship (để trống nghĩa nếu muốn tự dịch)"
+              rows={5}
+              style={{ resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.4' }}
+              required
+            />
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              * Các từ không có dấu hai chấm : sẽ được tự động tra cứu nghĩa và phát âm.
+            </span>
+          </div>
+
+          {error && <div style={{ color: 'var(--accent-danger)', padding: '0.4rem 0.75rem', background: 'rgba(239,68,68,0.1)', borderRadius: '8px', fontSize: '0.8rem' }}>{error}</div>}
+          {success && <div style={{ color: 'var(--accent-success)', padding: '0.4rem 0.75rem', background: 'rgba(16,185,129,0.1)', borderRadius: '8px', fontSize: '0.8rem' }}>{success}</div>}
+
+          <button type="submit" className="btn btn-primary" disabled={isLoading || !quickText.trim()}>
+            {isLoading ? <Loader2 className="spin" size={16} /> : <Zap size={16} />}
+            {isLoading ? 'Đang xử lý...' : 'Thêm nhanh từ vựng'}
+          </button>
+        </form>
+      )}
+
+      {activeAddTab === 'upload' && (
         <ImportExcelCSV words={words} onAdd={onAdd} onAddWords={onAddWords} onCloseTab={() => setActiveAddTab('manual')} />
       )}
       

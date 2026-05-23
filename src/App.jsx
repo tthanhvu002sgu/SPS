@@ -4,6 +4,7 @@ import StudySession from './components/StudySession';
 import Settings from './components/Settings';
 import WordList from './components/WordList';
 import { Sparkles, BrainCircuit, Settings as SettingsIcon, Library } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 function App() {
   const { 
@@ -74,25 +75,54 @@ function App() {
       </header>
 
       <main className="main-container" style={{ position: 'relative', width: '100%', height: '100%' }}>
-        <div style={{ display: activeTab === 'library' ? 'block' : 'none', height: '100%' }}>
-          <WordList words={words} updateWord={updateWord} deleteWord={deleteWord} addWord={addWord} addWords={addWords} />
-        </div>
-        
-        <div style={{ display: activeTab === 'study' ? 'block' : 'none', height: '100%' }}>
-          <StudySession 
-            words={words} 
-            settings={settings} 
-            onUpdateWord={updateWord} 
-            recordReview={recordReview}
-            streak={streak}
-            reviewHistory={reviewHistory}
-            isActive={activeTab === 'study'}
-          />
-        </div>
-        
-        <div style={{ display: activeTab === 'settings' ? 'block' : 'none', height: '100%' }}>
-          <Settings words={words} settings={settings} updateSettings={updateSettings} importData={importData} />
-        </div>
+        <AnimatePresence mode="wait">
+          {activeTab === 'library' && (
+            <motion.div
+              key="library"
+              initial={{ opacity: 0, y: 12, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.99 }}
+              transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
+              style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}
+            >
+              <WordList words={words} updateWord={updateWord} deleteWord={deleteWord} addWord={addWord} addWords={addWords} />
+            </motion.div>
+          )}
+          
+          {activeTab === 'study' && (
+            <motion.div
+              key="study"
+              initial={{ opacity: 0, y: 12, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.99 }}
+              transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
+              style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}
+            >
+              <StudySession 
+                words={words} 
+                settings={settings} 
+                onUpdateWord={updateWord} 
+                recordReview={recordReview}
+                streak={streak}
+                reviewHistory={reviewHistory}
+                isActive={activeTab === 'study'}
+              />
+            </motion.div>
+          )}
+          
+          {activeTab === 'settings' && (
+            <motion.div
+              key="settings"
+              initial={{ opacity: 0, y: 12, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.99 }}
+              transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
+              style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}
+            >
+              <Settings words={words} settings={settings} updateSettings={updateSettings} importData={importData} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
     </>
   );
