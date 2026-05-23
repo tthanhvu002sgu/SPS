@@ -587,6 +587,7 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
             display: 'flex', 
             flexDirection: 'column', 
             overflowY: 'auto', 
+            maxHeight: '380px', // Set a maximum height to prevent stretching the parent card and trigger internal scroll
             flex: 1, 
             minHeight: 0, 
             gap: '0.25rem',
@@ -603,7 +604,11 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
               fontSize: '0.8rem',
               borderBottom: '1px solid var(--glass-border)',
               color: 'var(--text-muted)',
-              alignItems: 'center'
+              alignItems: 'center',
+              position: 'sticky',
+              top: 0,
+              zIndex: 2,
+              background: '#1e2433' // Solid background matching the glass panel theme to prevent text showing through when scrolling
             }}>
               <input 
                 type="checkbox" 
