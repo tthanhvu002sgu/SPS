@@ -4,7 +4,7 @@ import { X, Check, Brain, Frown, Sparkles, Smile, Coffee, Volume2 } from 'lucide
 import { processReview } from '../utils/srs';
 import Dashboard from './Dashboard';
 
-const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, reviewHistory }) => {
+const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, reviewHistory, isActive }) => {
   const [queue, setQueue] = useState([]);
   const [currentWord, setCurrentWord] = useState(null);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -100,6 +100,8 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
   }, [settings.voiceURI]);
 
   useEffect(() => {
+    if (!isActive) return;
+
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (sessionComplete || !currentWord) return;
@@ -127,13 +129,13 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFlipped, sessionComplete, currentWord, queue, practiceMode, settings, handleGrade, speakWord]);
+  }, [isActive, isFlipped, sessionComplete, currentWord, queue, practiceMode, settings, handleGrade, speakWord]);
 
   useEffect(() => {
-    if (currentWord && !sessionComplete) {
+    if (isActive && currentWord && !sessionComplete) {
       speakWord(currentWord.word);
     }
-  }, [currentWord, sessionComplete, speakWord]);
+  }, [isActive, currentWord, sessionComplete, speakWord]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '0.75rem', overflow: 'hidden' }}>

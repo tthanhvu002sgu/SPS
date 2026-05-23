@@ -73,9 +73,12 @@ function App() {
         </nav>
       </header>
 
-      <main className="main-container">
-        {activeTab === 'library' && <WordList words={words} updateWord={updateWord} deleteWord={deleteWord} addWord={addWord} addWords={addWords} />}
-        {activeTab === 'study' && (
+      <main className="main-container" style={{ position: 'relative', width: '100%', height: '100%' }}>
+        <div style={{ display: activeTab === 'library' ? 'block' : 'none', height: '100%' }}>
+          <WordList words={words} updateWord={updateWord} deleteWord={deleteWord} addWord={addWord} addWords={addWords} />
+        </div>
+        
+        <div style={{ display: activeTab === 'study' ? 'block' : 'none', height: '100%' }}>
           <StudySession 
             words={words} 
             settings={settings} 
@@ -83,9 +86,13 @@ function App() {
             recordReview={recordReview}
             streak={streak}
             reviewHistory={reviewHistory}
+            isActive={activeTab === 'study'}
           />
-        )}
-        {activeTab === 'settings' && <Settings words={words} settings={settings} updateSettings={updateSettings} importData={importData} />}
+        </div>
+        
+        <div style={{ display: activeTab === 'settings' ? 'block' : 'none', height: '100%' }}>
+          <Settings words={words} settings={settings} updateSettings={updateSettings} importData={importData} />
+        </div>
       </main>
     </>
   );
