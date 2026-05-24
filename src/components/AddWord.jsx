@@ -178,18 +178,24 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
 
     const parsedWords = [];
     for (const line of lines) {
-      const colonIndex = line.indexOf(':');
+      const parts = line.split(':');
       let w = '';
       let translation = '';
-      if (colonIndex !== -1) {
-        w = line.substring(0, colonIndex).trim();
-        translation = line.substring(colonIndex + 1).trim();
+      let ex = '';
+
+      if (parts.length >= 3) {
+        w = parts[0].trim();
+        translation = parts[1].trim();
+        ex = parts.slice(2).join(':').trim();
+      } else if (parts.length === 2) {
+        w = parts[0].trim();
+        translation = parts[1].trim();
       } else {
-        w = line.trim();
+        w = parts[0].trim();
       }
 
       if (w) {
-        parsedWords.push({ word: w, viMeaning: translation });
+        parsedWords.push({ word: w, viMeaning: translation, example: ex });
       }
     }
 
@@ -230,13 +236,15 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
       const newWordsList = await Promise.all(uniqueWords.map(async (item) => {
         let finalMeaning = '';
         let finalViMeaning = item.viMeaning;
-        let finalExample = '';
+        let finalExample = item.example || '';
         let finalPhonetic = '';
 
         const dictData = await fetchFromDictionary(item.word);
         if (dictData) {
           finalMeaning = dictData.fetchedMeaning;
-          finalExample = dictData.fetchedExample;
+          if (!finalExample) {
+            finalExample = dictData.fetchedExample;
+          }
           finalPhonetic = dictData.fetchedPhonetic;
         }
 
@@ -287,7 +295,7 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
           )}
           {activeAddTab === 'quick' && (
             <>
-              <Zap size={16} className="text-gradient" /> Thêm nhanh (từ gốc: dịch)
+              <Zap size={16} className="text-gradient" /> Thêm nhanh (từ: dịch: câu ví dụ)
             </>
           )}
           {activeAddTab === 'upload' && (
@@ -390,13 +398,13 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
               className="input-field"
               value={quickText}
               onChange={e => setQuickText(e.target.value)}
-              placeholder="Nhập từ vựng định dạng 'từ gốc: dịch' (mỗi từ một dòng)&#10;Ví dụ:&#10;hello: xin chào&#10;apple: quả táo&#10;beautiful: xinh đẹp&#10;championship (để trống nghĩa nếu muốn tự dịch)"
+              placeholder="Nhập từ vựng định dạng 'từ: dịch: câu ví dụ' (mỗi từ một dòng)&#10;Ví dụ:&#10;hello: xin chào: Hello, how are you?&#10;apple: quả táo: I eat an apple every day&#10;beautiful: xinh đẹp&#10;championship (để trống dịch và ví dụ nếu muốn tự động tra cứu)"
               rows={5}
               style={{ resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.4' }}
               required
             />
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              * Các từ không có dấu hai chấm : sẽ được tự động tra cứu nghĩa và phát âm.
+              * Có thể bỏ trống phần dịch hoặc câu ví dụ (hệ thống sẽ tự động dịch hoặc lấy câu ví dụ nếu có).
             </span>
           </div>
 
