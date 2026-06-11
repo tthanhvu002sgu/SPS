@@ -157,6 +157,10 @@ export const useVocab = () => {
     setWords(prev => prev.filter(w => w.id !== id));
   };
 
+  const clearAllWords = () => {
+    setWords([]);
+  };
+
   const updateSettings = (newSettings) => {
     setSettings(prev => ({ ...prev, ...newSettings }));
   };
@@ -230,6 +234,7 @@ export const useVocab = () => {
     addWords,
     updateWord,
     deleteWord,
+    clearAllWords,
     updateSettings,
     importData,
     reviewHistory,

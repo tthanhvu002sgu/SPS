@@ -14,6 +14,7 @@ function App() {
     updateWord, 
     updateSettings, 
     deleteWord, 
+    clearAllWords,
     importData,
     reviewHistory,
     recordReview,
@@ -91,7 +92,7 @@ function App() {
         </div>
         
         <div style={{ display: activeTab === 'settings' ? 'block' : 'none', height: '100%' }}>
-          <Settings words={words} settings={settings} updateSettings={updateSettings} importData={importData} />
+          <Settings words={words} settings={settings} updateSettings={updateSettings} importData={importData} clearAllWords={clearAllWords} />
         </div>
       </main>
     </>

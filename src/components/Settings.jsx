@@ -1,11 +1,28 @@
 import React, { useRef } from 'react';
-import { Settings as SettingsIcon, Save, Download, Upload, RotateCcw } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Download, Upload, RotateCcw, Trash2 } from 'lucide-react';
 
-const Settings = ({ words, settings, updateSettings, importData }) => {
+const Settings = ({ words, settings, updateSettings, importData, clearAllWords }) => {
   const [localSettings, setLocalSettings] = React.useState(settings);
   const [saved, setSaved] = React.useState(false);
   const [dataMessage, setDataMessage] = React.useState('');
   const fileInputRef = useRef(null);
+
+  const handleDeleteAll = () => {
+    if (words.length === 0) {
+      alert('Không có từ vựng nào để xóa.');
+      return;
+    }
+    const confirmDelete = window.confirm(
+      `CẢNH BÁO: Bạn có chắc chắn muốn xóa toàn bộ từ vựng hiện tại?\n\n` +
+      `Hành động này sẽ xóa tất cả ${words.length} từ trong danh sách của bạn.\n` +
+      `Lưu ý: Bạn vẫn có thể khôi phục lại từ Bản sao lưu tự động (nếu có) hoặc tải file JSON sao lưu của bạn lên.`
+    );
+    if (confirmDelete) {
+      clearAllWords();
+      setDataMessage('Đã xóa toàn bộ từ vựng thành công!');
+      setTimeout(() => setDataMessage(''), 3000);
+    }
+  };
 
   const [voices, setVoices] = React.useState([]);
 
@@ -157,6 +174,10 @@ const Settings = ({ words, settings, updateSettings, importData }) => {
 
           <button onClick={handleRestoreAutoBackup} className="btn btn-outline" style={{ justifyContent: 'center', color: 'var(--accent-warning)', borderColor: 'rgba(245,158,11,0.3)' }}>
             <RotateCcw size={16} /> Restore from Auto-Backup
+          </button>
+
+          <button onClick={handleDeleteAll} className="btn btn-outline" style={{ justifyContent: 'center', color: 'var(--accent-danger)', borderColor: 'rgba(239, 68, 68, 0.3)', marginTop: '0.5rem' }}>
+            <Trash2 size={16} /> Xóa toàn bộ từ vựng
           </button>
 
           {dataMessage && (
