@@ -41,10 +41,10 @@ const Settings = ({ words, settings, updateSettings, importData, clearAllWords }
   }, []);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type } = e.target;
     setLocalSettings(prev => ({
       ...prev,
-      [name]: name === 'voiceURI' ? value : Number(value)
+      [name]: type === 'number' ? Number(value) : value
     }));
     setSaved(false);
   };
@@ -132,12 +132,32 @@ const Settings = ({ words, settings, updateSettings, importData, clearAllWords }
 
           <div>
             <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.9rem' }}>Pronunciation Voice</label>
-            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>Select the voice used for auto-pronunciation.</p>
+            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>Select the voice used for pronunciation.</p>
             <select name="voiceURI" className="input-field" value={localSettings.voiceURI || ''} onChange={handleChange}>
               <option value="">System Default</option>
               {voices.map(v => (
                 <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>
               ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.9rem' }}>Gemini API Key</label>
+            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+              Dùng để chấm điểm Bài tập đặt câu. Lấy API key miễn phí tại <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-primary)' }}>Google AI Studio</a>.
+            </p>
+            <input type="password" name="geminiApiKey" className="input-field" value={localSettings.geminiApiKey || ''} onChange={handleChange} placeholder="Nhập API Key bắt đầu bằng AIzaSy..." />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.9rem' }}>Gemini Model</label>
+            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>Chọn mô hình AI dùng để chấm câu.</p>
+            <select name="geminiModel" className="input-field" value={localSettings.geminiModel || 'gemini-2.5-flash-lite'} onChange={handleChange}>
+              <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite</option>
+              <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview)</option>
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+              <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Mặc định)</option>
             </select>
           </div>
 

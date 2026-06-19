@@ -15,6 +15,8 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [reviewWordsList, setReviewWordsList] = useState(null);
+  const [reviewDuplicates, setReviewDuplicates] = useState([]);
 
   const translateToVi = async (text) => {
     try {
@@ -161,20 +163,16 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
     setTimeout(() => setSuccess(''), 3000);
   };
 
-  const handleQuickAddSubmit = async (e) => {
+  const handleQuickAddReview = (e) => {
     e.preventDefault();
     if (!quickText.trim()) return;
 
-    setIsLoading(true);
     setError('');
     setSuccess('');
 
     const lines = quickText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
     
-    if (lines.length === 0) {
-      setIsLoading(false);
-      return;
-    }
+    if (lines.length === 0) return;
 
     const parsedWords = [];
     for (const line of lines) {
@@ -199,10 +197,7 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
       }
     }
 
-    if (parsedWords.length === 0) {
-      setIsLoading(false);
-      return;
-    }
+    if (parsedWords.length === 0) return;
 
     const duplicates = [];
     const uniqueWords = [];
@@ -228,12 +223,19 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
           ? `Từ "${duplicates[0]}" đã tồn tại trong thư viện!` 
           : `Các từ đã tồn tại: ${duplicates.map(d => `"${d}"`).join(', ')}`
       );
-      setIsLoading(false);
       return;
     }
 
+    setReviewWordsList(uniqueWords);
+    setReviewDuplicates(duplicates);
+  };
+
+  const confirmQuickAdd = async () => {
+    if (!reviewWordsList || reviewWordsList.length === 0) return;
+    
+    setIsLoading(true);
     try {
-      const newWordsList = await Promise.all(uniqueWords.map(async (item) => {
+      const newWordsList = await Promise.all(reviewWordsList.map(async (item) => {
         let finalMeaning = '';
         let finalViMeaning = item.viMeaning;
         let finalExample = item.example || '';
@@ -271,10 +273,12 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
       }
 
       setSuccess(`Đã thêm thành công ${newWordsList.length} từ vựng!`);
-      if (duplicates.length > 0) {
-        setError(`Bỏ qua ${duplicates.length} từ trùng lặp: ${duplicates.join(', ')}`);
+      if (reviewDuplicates.length > 0) {
+        setError(`Bỏ qua ${reviewDuplicates.length} từ trùng lặp: ${reviewDuplicates.join(', ')}`);
       }
       setQuickText('');
+      setReviewWordsList(null);
+      setReviewDuplicates([]);
     } catch (err) {
       console.error(err);
       setError('Đã xảy ra lỗi khi thêm từ vựng. Vui lòng thử lại!');
@@ -392,7 +396,7 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
       )}
 
       {activeAddTab === 'quick' && (
-        <form onSubmit={handleQuickAddSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <form onSubmit={handleQuickAddReview} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
             <textarea
               className="input-field"
@@ -422,6 +426,57 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
         <ImportExcelCSV words={words} onAdd={onAdd} onAddWords={onAddWords} onCloseTab={() => setActiveAddTab('manual')} />
       )}
       
+      {reviewWordsList && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ width: '100%', maxWidth: '600px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--bg-dark)', border: '1px solid var(--glass-border)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.75)' }}>
+            <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Zap size={20} className="text-gradient" /> Kiểm tra lại từ vựng
+            </h3>
+            
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              Hệ thống đã nhận diện được <strong>{reviewWordsList.length}</strong> từ vựng mới. Bạn vui lòng kiểm tra lại xem định dạng đã đúng chưa.
+            </p>
+
+            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--glass-border)', borderRadius: '8px', padding: '0.5rem', background: 'var(--bg-darker)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--glass-border)', color: 'var(--text-muted)' }}>
+                    <th style={{ textAlign: 'left', padding: '0.5rem' }}>Từ vựng</th>
+                    <th style={{ textAlign: 'left', padding: '0.5rem' }}>Nghĩa (Tùy chọn)</th>
+                    <th style={{ textAlign: 'left', padding: '0.5rem' }}>Ví dụ (Tùy chọn)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reviewWordsList.map((item, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <td style={{ padding: '0.5rem', fontWeight: 600, color: 'var(--accent-primary)' }}>{item.word}</td>
+                      <td style={{ padding: '0.5rem' }}>{item.viMeaning || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Tự động dịch</span>}</td>
+                      <td style={{ padding: '0.5rem' }}>{item.example || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Tự động lấy</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {reviewDuplicates.length > 0 && (
+              <div style={{ color: 'var(--accent-warning)', fontSize: '0.8rem', padding: '0.5rem', background: 'rgba(245,158,11,0.1)', borderRadius: '8px' }}>
+                <strong>Lưu ý:</strong> Sẽ bỏ qua {reviewDuplicates.length} từ đã tồn tại ({reviewDuplicates.join(', ')}).
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.5rem', flexShrink: 0 }}>
+              <button onClick={() => setReviewWordsList(null)} type="button" className="btn btn-outline" style={{ padding: '0.5rem 1rem', borderRadius: '8px' }} disabled={isLoading}>
+                Hủy bỏ
+              </button>
+              <button onClick={confirmQuickAdd} type="button" className="btn btn-primary" style={{ padding: '0.5rem 1rem', borderRadius: '8px' }} disabled={isLoading}>
+                {isLoading ? <Loader2 className="spin" size={16} /> : <Plus size={16} />}
+                {isLoading ? 'Đang thêm...' : 'Xác nhận thêm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style dangerouslySetInnerHTML={{__html:`
         @keyframes spin { 100% { transform: rotate(360deg); } }
         .spin { animation: spin 1s linear infinite; }

@@ -4,6 +4,38 @@ import { X, Check, Brain, Frown, Sparkles, Smile, Coffee, Volume2, Edit, Loader2
 import { processReview } from '../utils/srs';
 import Dashboard from './Dashboard';
 
+const MarkdownText = ({ text }) => {
+  if (!text) return null;
+  const lines = text.split('\n');
+  return (
+    <div style={{ fontSize: '0.95rem', lineHeight: '1.6', color: 'var(--text-main)' }}>
+      {lines.map((line, i) => {
+        let isList = line.trim().startsWith('* ') || line.trim().startsWith('- ');
+        let rawContent = isList ? line.trim().substring(2) : line;
+        
+        const formatted = rawContent
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+        if (isList) {
+          return (
+            <div key={i} style={{ display: 'flex', marginBottom: '0.4rem', marginLeft: '1rem' }}>
+              <span style={{ marginRight: '0.5rem', color: 'var(--accent-primary)' }}>•</span>
+              <span dangerouslySetInnerHTML={{ __html: formatted }} />
+            </div>
+          );
+        }
+        if (line.trim() === '') {
+          return <div key={i} style={{ height: '0.8rem' }} />;
+        }
+        return (
+          <div key={i} style={{ marginBottom: '0.4rem' }} dangerouslySetInnerHTML={{ __html: formatted }} />
+        );
+      })}
+    </div>
+  );
+};
+
 const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, reviewHistory, isActive }) => {
   const [queue, setQueue] = useState([]);
   const [currentWord, setCurrentWord] = useState(null);
@@ -23,6 +55,15 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
   const [editExample, setEditExample] = useState('');
   const [isAutoLoading, setIsAutoLoading] = useState(false);
   const [editError, setEditError] = useState('');
+
+  // Sentence Practice States
+  const [sessionPhase, setSessionPhase] = useState('flashcards'); // flashcards, sentence, complete
+  const [reviewedWords, setReviewedWords] = useState([]);
+  const [sentenceQueue, setSentenceQueue] = useState([]);
+  const [currentSentenceWord, setCurrentSentenceWord] = useState(null);
+  const [userSentence, setUserSentence] = useState('');
+  const [aiFeedback, setAiFeedback] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
 
   // Helpers for API Lookup inside Edit
   const translateToVi = async (text) => {
@@ -83,52 +124,49 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
     }
   }, [currentWord, randomFrontBack]);
 
-  // Initialize queue when isStudying becomes true or practiceMode/words changes
-  useEffect(() => {
-    if (!isStudying) return;
-
+  const handleStartStudy = () => {
     if (practiceMode) {
-      // In practice mode, queue all words
       const shuffled = [...words].sort(() => 0.5 - Math.random());
       setQueue(shuffled);
+      setReviewedWords([]);
       if (shuffled.length > 0) {
         setCurrentWord(shuffled[0]);
         setSessionComplete(false);
+        setSessionPhase('flashcards');
       } else {
         setSessionComplete(true);
+        setSessionPhase('complete');
       }
-      return;
-    }
-
-    const today = new Date().setHours(0,0,0,0);
-    const reviewedCount = words.filter(w => w.isReviewedToday).length;
-    
-    // Total allowed to review today
-    const remainingQuota = Math.max(0, settings.dailyLimit - reviewedCount);
-    
-    // Find due words
-    let dueWords = words.filter(w => w.nextReviewDate <= today && !w.isReviewedToday);
-    
-    // Sort by nextReviewDate (oldest first)
-    dueWords.sort((a, b) => a.nextReviewDate - b.nextReviewDate);
-    
-    // Apply limit
-    dueWords = dueWords.slice(0, remainingQuota);
-
-    setQueue(dueWords);
-    if (dueWords.length > 0) {
-      setCurrentWord(dueWords[0]);
-      setSessionComplete(false);
     } else {
-      setSessionComplete(true);
+      const today = new Date().setHours(0,0,0,0);
+      const reviewedCount = words.filter(w => w.isReviewedToday).length;
+      
+      const remainingQuota = Math.max(0, settings.dailyLimit - reviewedCount);
+      let dueWords = words.filter(w => w.nextReviewDate <= today && !w.isReviewedToday);
+      dueWords.sort((a, b) => a.nextReviewDate - b.nextReviewDate);
+      dueWords = dueWords.slice(0, remainingQuota);
+
+      setQueue(dueWords);
+      setReviewedWords([]);
+      if (dueWords.length > 0) {
+        setCurrentWord(dueWords[0]);
+        setSessionComplete(false);
+        setSessionPhase('flashcards');
+      } else {
+        setSessionComplete(true);
+        setSessionPhase('complete');
+      }
     }
-  }, [isStudying, words, settings.dailyLimit, practiceMode]);
+    setIsStudying(true);
+  };
 
   const handleExitSession = () => {
     setIsStudying(false);
     setSessionComplete(false);
+    setSessionPhase('flashcards');
     setCurrentWord(null);
     setQueue([]);
+    setSentenceQueue([]);
     setIsEditing(false);
   };
 
@@ -146,6 +184,13 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
       recordReview(currentWord.id, grade);
     }
     
+    setReviewedWords(prev => {
+      if (!prev.find(w => w.id === currentWord.id)) {
+        return [...prev, currentWord];
+      }
+      return prev;
+    });
+
     setIsFlipped(false);
     
     const newQueue = queue.slice(1);
@@ -156,6 +201,71 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
         setCurrentWord(newQueue[0]);
       }, 150);
     } else {
+      // Transition to sentence making phase
+      const toPractice = [...reviewedWords, currentWord]
+        .filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i)
+        .sort(() => 0.5 - Math.random())
+        .slice(0, 5); // Pick up to 5 words
+        
+      if (toPractice.length > 0) {
+        setSentenceQueue(toPractice);
+        setCurrentSentenceWord(toPractice[0]);
+        setUserSentence('');
+        setAiFeedback('');
+        setSessionPhase('sentence');
+      } else {
+        setSessionComplete(true);
+        setSessionPhase('complete');
+      }
+    }
+  };
+
+  const handleVerifySentence = async () => {
+    if (!userSentence.trim() || !currentSentenceWord) return;
+    
+    if (!settings.geminiApiKey) {
+      setAiFeedback('Vui lòng vào phần Cài đặt (Settings) để nhập Gemini API Key trước khi sử dụng tính năng này.');
+      return;
+    }
+
+    setIsVerifying(true);
+    setAiFeedback('');
+    try {
+      const prompt = `Người dùng đang học từ vựng tiếng Anh: ${currentSentenceWord.word}. Họ đã đặt câu sau: ${userSentence}. Hãy nhận xét xem câu này có đúng ngữ pháp không, việc sử dụng từ ${currentSentenceWord.word} có tự nhiên không, và gợi ý cách sửa nếu cần. Trả lời ngắn gọn bằng tiếng Việt.`;
+      
+      const model = settings.geminiModel || 'gemini-2.5-flash-lite';
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.geminiApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }]
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (data.error) {
+        setAiFeedback('Lỗi từ API: ' + data.error.message);
+      } else if (data.candidates && data.candidates.length > 0) {
+        setAiFeedback(data.candidates[0].content.parts[0].text);
+      } else {
+        setAiFeedback('Không nhận được phản hồi hợp lệ từ AI.');
+      }
+    } catch (e) {
+      setAiFeedback('Lỗi mạng: Không thể kết nối tới Google API.');
+    }
+    setIsVerifying(false);
+  };
+
+  const handleNextSentence = () => {
+    const nextQ = sentenceQueue.slice(1);
+    setSentenceQueue(nextQ);
+    setUserSentence('');
+    setAiFeedback('');
+    if (nextQ.length > 0) {
+      setCurrentSentenceWord(nextQ[0]);
+    } else {
+      setSessionPhase('complete');
       setSessionComplete(true);
     }
   };
@@ -186,11 +296,12 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
     if (!isActive) return;
 
     const handleKeyDown = (e) => {
-      if (isEditing) return; // Disable key bindings during card editing
+      if (isEditing || sessionPhase === 'sentence') return; // Disable key bindings during card editing or sentence making
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (sessionComplete || !currentWord) return;
 
-      if (e.key === 'Control') {
+      if (e.key === 'Control' || e.key === 'Enter') {
+        e.preventDefault();
         if (!showReverse || isFlipped) {
           speakWord(currentWord.word);
         }
@@ -198,7 +309,7 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
       }
 
       if (!isFlipped) {
-        if (e.key === ' ' || e.key === 'Enter') {
+        if (e.key === ' ') {
           e.preventDefault();
           handleFlip();
         }
@@ -217,17 +328,7 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isActive, isFlipped, sessionComplete, currentWord, queue, practiceMode, settings, handleGrade, speakWord, showReverse, isEditing]);
 
-  useEffect(() => {
-    if (isActive && currentWord && !sessionComplete && !showReverse) {
-      speakWord(currentWord.word);
-    }
-  }, [isActive, currentWord, sessionComplete, speakWord, showReverse]);
-
-  useEffect(() => {
-    if (isActive && currentWord && !sessionComplete && showReverse && isFlipped) {
-      speakWord(currentWord.word);
-    }
-  }, [isActive, currentWord, sessionComplete, showReverse, isFlipped, speakWord]);
+  // Audio is now triggered manually via Enter/Control key instead of automatically on load/flip.
 
   // Edit action handlers
   const handleStartEdit = (e) => {
@@ -432,7 +533,7 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
 
           {/* Big CTA Start Button */}
           <button
-            onClick={() => setIsStudying(true)}
+            onClick={handleStartStudy}
             disabled={!practiceMode && dueCount === 0}
             className="btn btn-primary"
             style={{
@@ -487,7 +588,7 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
         </div>
       </div>
 
-      {sessionComplete ? (
+      {sessionPhase === 'complete' ? (
         <div className="glass-panel flex-center" style={{ flexDirection: 'column', textAlign: 'center', flex: 1, minHeight: 0 }}>
           <div style={{ background: 'rgba(16,185,129,0.1)', color: 'var(--accent-success)', padding: '1.5rem', borderRadius: '50%', marginBottom: '1rem' }}>
             <Coffee size={48} />
@@ -501,6 +602,95 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
           <button onClick={handleExitSession} className="btn btn-primary" style={{ padding: '0.6rem 1.5rem', borderRadius: '8px' }}>
             Về Dashboard
           </button>
+        </div>
+      ) : sessionPhase === 'sentence' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', flex: 1, minHeight: 0, overflowY: 'auto', padding: '1rem' }}>
+          <div style={{ background: 'var(--glass-bg)', padding: '0.3rem 1rem', borderRadius: '999px', border: '1px solid var(--glass-border)', fontSize: '0.85rem', flexShrink: 0 }}>
+            Bài tập đặt câu (Còn <strong className="text-gradient">{sentenceQueue.length}</strong> từ)
+          </div>
+          
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '600px', padding: '1.5rem', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '1rem', flexShrink: 0 }}>
+            <h3 style={{ fontSize: '1.2rem', textAlign: 'center' }}>
+              Hãy đặt một câu tiếng Anh với từ:
+            </h3>
+            <div style={{ textAlign: 'center' }}>
+              <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0 }}>{currentSentenceWord?.word}</h1>
+              <p className="text-muted" style={{ fontSize: '1.1rem', marginTop: '0.25rem' }}>{currentSentenceWord?.phonetic}</p>
+              <p style={{ color: 'var(--accent-warning)', fontWeight: 600 }}>{currentSentenceWord?.viMeaning}</p>
+              <p className="text-muted" style={{ fontSize: '0.9rem' }}>{currentSentenceWord?.meaning}</p>
+            </div>
+            
+            <textarea
+              className="input-field"
+              value={userSentence}
+              onChange={e => setUserSentence(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (userSentence.trim() && !isVerifying && !aiFeedback) {
+                    handleVerifySentence();
+                  }
+                }
+              }}
+              placeholder="Nhập câu của bạn vào đây..."
+              rows={3}
+              style={{ resize: 'vertical', fontSize: '1rem', padding: '1rem' }}
+            />
+            
+            {!aiFeedback && (
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  onClick={handleVerifySentence}
+                  disabled={!userSentence.trim() || isVerifying}
+                  className="btn btn-primary"
+                  style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  {isVerifying ? <Loader2 size={18} className="spin" /> : <Sparkles size={18} />}
+                  {isVerifying ? 'AI Đang kiểm tra...' : 'Nhờ AI Kiểm Tra'}
+                </button>
+              </div>
+            )}
+            
+            {aiFeedback && (() => {
+              const isError = aiFeedback.startsWith('Lỗi') || aiFeedback.startsWith('Không') || aiFeedback.includes('Vui lòng vào phần Cài đặt');
+              return (
+                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1.25rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', color: isError ? 'var(--accent-danger)' : 'var(--accent-primary)' }}>
+                    <Sparkles size={18} />
+                    <h4 style={{ margin: 0, fontSize: '1rem' }}>{isError ? 'Cảnh báo' : 'Nhận xét'}</h4>
+                  </div>
+                  <MarkdownText text={aiFeedback} />
+                  
+                  {isError ? (
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                      <button
+                        onClick={() => setAiFeedback('')}
+                        className="btn btn-primary"
+                        style={{ flex: 1, padding: '0.75rem', borderRadius: '8px' }}
+                      >
+                        Thử lại
+                      </button>
+                      <button
+                        onClick={handleNextSentence}
+                        className="btn btn-outline"
+                        style={{ flex: 1, padding: '0.75rem', borderRadius: '8px' }}
+                      >
+                        Bỏ qua
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleNextSentence}
+                      className="btn btn-primary"
+                      style={{ width: '100%', marginTop: '1rem', padding: '0.75rem', borderRadius: '8px' }}
+                    >
+                      Tiếp tục
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
         </div>
       ) : currentWord ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', flex: 1, minHeight: 0, overflow: 'hidden' }}>
