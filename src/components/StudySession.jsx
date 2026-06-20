@@ -184,12 +184,14 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
       recordReview(currentWord.id, grade);
     }
     
-    setReviewedWords(prev => {
-      if (!prev.find(w => w.id === currentWord.id)) {
-        return [...prev, currentWord];
-      }
-      return prev;
-    });
+    if (grade > 0) {
+      setReviewedWords(prev => {
+        if (!prev.find(w => w.id === currentWord.id)) {
+          return [...prev, currentWord];
+        }
+        return prev;
+      });
+    }
 
     setIsFlipped(false);
     
@@ -202,10 +204,14 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
       }, 150);
     } else {
       // Transition to sentence making phase
-      const toPractice = [...reviewedWords, currentWord]
+      let finalReviewed = [...reviewedWords];
+      if (grade > 0 && !finalReviewed.find(w => w.id === currentWord.id)) {
+        finalReviewed.push(currentWord);
+      }
+
+      const toPractice = finalReviewed
         .filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i)
-        .sort(() => 0.5 - Math.random())
-        .slice(0, 5); // Pick up to 5 words
+        .sort(() => 0.5 - Math.random());
         
       if (toPractice.length > 0) {
         setSentenceQueue(toPractice);
@@ -269,6 +275,28 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
       setSessionComplete(true);
     }
   };
+
+  useEffect(() => {
+    if (!isActive || sessionPhase !== 'sentence') return;
+
+    const handleSentenceKey = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.target.tagName === 'BUTTON') return;
+        e.preventDefault();
+        if (aiFeedback) {
+          const isError = aiFeedback.startsWith('Lỗi') || aiFeedback.startsWith('Không') || aiFeedback.includes('Vui lòng vào phần Cài đặt');
+          if (!isError) {
+            handleNextSentence();
+          }
+        } else if (userSentence.trim() && !isVerifying) {
+          handleVerifySentence();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleSentenceKey);
+    return () => window.removeEventListener('keydown', handleSentenceKey);
+  });
 
   const speakWord = React.useCallback((text, e) => {
     if (e) e.stopPropagation(); // prevent flipping the card when clicking the speaker icon
@@ -624,14 +652,6 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
               className="input-field"
               value={userSentence}
               onChange={e => setUserSentence(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  if (userSentence.trim() && !isVerifying && !aiFeedback) {
-                    handleVerifySentence();
-                  }
-                }
-              }}
               placeholder="Nhập câu của bạn vào đây..."
               rows={3}
               style={{ resize: 'vertical', fontSize: '1rem', padding: '1rem' }}
