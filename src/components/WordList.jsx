@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Edit2, Trash2, Save, X, Search as SearchIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import AddWord from './AddWord';
 
-const WordList = ({ words, updateWord, deleteWord, addWord, addWords }) => {
+const WordList = ({ words, settings, topics, addTopic, updateWord, deleteWord, addWord, addWords }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ word: '', meaning: '', example: '' });
@@ -12,7 +12,9 @@ const WordList = ({ words, updateWord, deleteWord, addWord, addWords }) => {
   const filteredWords = words.filter(w => 
     w.word.toLowerCase().includes(searchTerm.toLowerCase()) || 
     (w.meaning && w.meaning.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (w.viMeaning && w.viMeaning.toLowerCase().includes(searchTerm.toLowerCase()))
+    (w.viMeaning && w.viMeaning.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (w.tags && w.tags.join(' ').toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (w.wordType && w.wordType.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const totalItems = filteredWords.length;
@@ -63,7 +65,7 @@ const WordList = ({ words, updateWord, deleteWord, addWord, addWords }) => {
 
   const startEdit = (word) => {
     setEditingId(word.id);
-    setEditForm({ word: word.word, phonetic: word.phonetic || '', meaning: word.meaning, viMeaning: word.viMeaning || '', example: word.example || '' });
+    setEditForm({ word: word.word, phonetic: word.phonetic || '', meaning: word.meaning, viMeaning: word.viMeaning || '', example: word.example || '', wordType: word.wordType || '', tags: word.tags || [] });
   };
 
   const cancelEdit = () => {
@@ -79,7 +81,9 @@ const WordList = ({ words, updateWord, deleteWord, addWord, addWords }) => {
         phonetic: editForm.phonetic,
         meaning: editForm.meaning,
         viMeaning: editForm.viMeaning,
-        example: editForm.example
+        example: editForm.example,
+        wordType: editForm.wordType,
+        tags: editForm.tags
       });
     }
     setEditingId(null);
@@ -93,7 +97,7 @@ const WordList = ({ words, updateWord, deleteWord, addWord, addWords }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '0.75rem', overflow: 'hidden' }}>
-      <AddWord words={words} onAdd={addWord} onAddWords={addWords} />
+      <AddWord words={words} settings={settings} topics={topics} addTopic={addTopic} onUpdateWord={updateWord} onAdd={addWord} onAddWords={addWords} />
       
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '0.75rem' }}>
         <div className="flex-between">
@@ -105,6 +109,9 @@ const WordList = ({ words, updateWord, deleteWord, addWord, addWords }) => {
             <SearchIcon size={15} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input 
               type="text" 
+              name="vocab_search_field"
+              autoComplete="off"
+              spellCheck="false"
               className="input-field" 
               placeholder="Search words..." 
               value={searchTerm}
@@ -137,9 +144,11 @@ const WordList = ({ words, updateWord, deleteWord, addWord, addWords }) => {
                 ) : (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.2rem', flexWrap: 'wrap' }}>
                         <h3 style={{ fontSize: '1.1rem', color: 'var(--accent-primary)' }}>{word.word}</h3>
                         {word.phonetic && <span className="text-muted" style={{ fontSize: '0.9rem', fontFamily: 'monospace' }}>{word.phonetic}</span>}
+                        {word.wordType && <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', color: 'var(--text-muted)' }}>{word.wordType}</span>}
+                        {word.tags && word.tags.map(t => <span key={t} style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', background: 'rgba(59, 130, 246, 0.15)', color: 'var(--accent-secondary)', borderRadius: '4px' }}>#{t}</span>)}
                       </div>
                       {word.viMeaning && <p style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--accent-warning)', marginBottom: '0.1rem' }}>{word.viMeaning}</p>}
                       <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>{word.meaning}</p>

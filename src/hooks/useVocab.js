@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { DEFAULT_TOPICS } from '../utils/tags';
 
 const STORAGE_KEY = 'spacedrep_vocab_data';
 const SETTINGS_KEY = 'spacedrep_settings';
@@ -51,6 +52,7 @@ export const useVocab = () => {
     dailyLimit: 20,
     intervalMultiplier: 1 // For future use if user wants to speed up/slow down
   });
+  const [topics, setTopics] = useState([]);
   const [reviewHistory, setReviewHistory] = useState({});
   const [isLoading, setIsLoading] = useState(true);
 
@@ -60,6 +62,14 @@ export const useVocab = () => {
       const storedWordsStr = localStorage.getItem(STORAGE_KEY);
       const storedSettingsStr = localStorage.getItem(SETTINGS_KEY);
       const storedHistoryStr = localStorage.getItem('spacedrep_review_history');
+      const storedTopicsStr = localStorage.getItem('spacedrep_topics');
+
+      if (storedTopicsStr) {
+        setTopics(JSON.parse(storedTopicsStr));
+      } else {
+        setTopics(DEFAULT_TOPICS);
+        localStorage.setItem('spacedrep_topics', JSON.stringify(DEFAULT_TOPICS));
+      }
 
       let initialWords = [];
       if (storedWordsStr) initialWords = JSON.parse(storedWordsStr);
@@ -136,8 +146,17 @@ export const useVocab = () => {
     if (!isLoading) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(words));
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      if (topics.length > 0) {
+        localStorage.setItem('spacedrep_topics', JSON.stringify(topics));
+      }
     }
-  }, [words, settings, isLoading]);
+  }, [words, settings, topics, isLoading]);
+
+  const addTopic = (newTopic) => {
+    if (newTopic && !topics.includes(newTopic)) {
+      setTopics(prev => [...prev, newTopic]);
+    }
+  };
 
   const addWord = (newWord) => {
     setWords(prev => [newWord, ...prev]);
@@ -230,12 +249,14 @@ export const useVocab = () => {
   return {
     words,
     settings,
+    topics,
     addWord,
     addWords,
     updateWord,
     deleteWord,
     clearAllWords,
     updateSettings,
+    addTopic,
     importData,
     reviewHistory,
     recordReview,

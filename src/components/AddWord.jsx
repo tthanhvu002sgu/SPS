@@ -2,10 +2,11 @@ import { useState } from 'react';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { getInitialSRSData } from '../utils/srs';
-import { Search, Plus, Loader2, FileSpreadsheet, Zap } from 'lucide-react';
+import { Search, Plus, Loader2, FileSpreadsheet, Zap, Bot } from 'lucide-react';
 import ImportExcelCSV from './ImportExcelCSV';
+import { autoTagWords } from '../utils/aiTagger';
 
-const AddWord = ({ words = [], onAdd, onAddWords }) => {
+const AddWord = ({ words = [], settings, topics = [], addTopic, onUpdateWord, onAdd, onAddWords }) => {
   const [activeAddTab, setActiveAddTab] = useState('manual');
   const [word, setWord] = useState('');
   const [meaning, setMeaning] = useState('');
@@ -17,6 +18,119 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
   const [success, setSuccess] = useState('');
   const [reviewWordsList, setReviewWordsList] = useState(null);
   const [reviewDuplicates, setReviewDuplicates] = useState([]);
+  const [isAutoTagging, setIsAutoTagging] = useState(false);
+  const [tagProgress, setTagProgress] = useState(0);
+  const [tagTotal, setTagTotal] = useState(0);
+  const [pendingTagSuggestions, setPendingTagSuggestions] = useState(null);
+  const [tagDecisions, setTagDecisions] = useState({});
+
+  const handleSaveTagDecisions = () => {
+    const newWords = [];
+    const updatedWords = [];
+    
+    pendingTagSuggestions.forEach((item, index) => {
+      const decision = tagDecisions[index] || 'new'; // Mặc định tạo tag mới nếu không chọn gì
+      let finalTags = [];
+      if (decision === 'new' && item.aiTag.suggestedNewTag) {
+        finalTags = [item.aiTag.suggestedNewTag];
+        if (addTopic) addTopic(item.aiTag.suggestedNewTag);
+      } else if (decision === 'existing' && item.aiTag.bestExistingTag) {
+        finalTags = [item.aiTag.bestExistingTag];
+      }
+
+      const finalWord = {
+        ...item.wordObj,
+        tags: finalTags,
+        wordType: item.aiTag.wordType || ''
+      };
+
+      if (item.isUpdate) {
+        updatedWords.push(finalWord);
+      } else {
+        newWords.push(finalWord);
+      }
+    });
+
+    if (updatedWords.length > 0) {
+      updatedWords.forEach(w => onUpdateWord(w));
+    }
+    if (newWords.length > 0) {
+      if (onAddWords && newWords.length > 1) {
+        onAddWords(newWords);
+      } else {
+        newWords.forEach(w => onAdd(w));
+      }
+    }
+
+    setSuccess(`Đã áp dụng và lưu ${pendingTagSuggestions.length} từ vựng!`);
+    setTimeout(() => setSuccess(''), 3000);
+    setPendingTagSuggestions(null);
+    setTagDecisions({});
+  };
+
+
+  const handleAutoTagAll = async () => {
+    if (!settings?.geminiApiKey) {
+      setError('Vui lòng nhập Gemini API Key trong phần Settings trước khi sử dụng tính năng này.');
+      return;
+    }
+    const wordsToTag = words.filter(w => !w.wordType || !w.tags || w.tags.length === 0);
+    if (wordsToTag.length === 0) {
+      setSuccess('Tuyệt vời! Tất cả từ vựng trong thư viện của bạn đều đã có Tag và Từ loại.');
+      return;
+    }
+
+    if (!window.confirm(`Tìm thấy ${wordsToTag.length} từ vựng chưa có Tag. Quá trình này sẽ gọi AI và mất vài phút, bạn có muốn bắt đầu không?`)) return;
+
+    setIsAutoTagging(true);
+    setError('');
+    setSuccess('');
+    setTagTotal(wordsToTag.length);
+    setTagProgress(0);
+
+    const BATCH_SIZE = 15;
+    let successCount = 0;
+    let allSuggestions = [];
+
+    for (let i = 0; i < wordsToTag.length; i += BATCH_SIZE) {
+      const batch = wordsToTag.slice(i, i + BATCH_SIZE);
+      try {
+        const aiTags = await autoTagWords(batch, settings.geminiApiKey, topics, settings.geminiModel);
+        aiTags.forEach(t => {
+          const match = batch.find(w => w.word.toLowerCase() === t.word.toLowerCase());
+          if (match) {
+            if (t.suggestedNewTag) {
+              allSuggestions.push({ wordObj: match, aiTag: t, isUpdate: true });
+            } else {
+              onUpdateWord({
+                ...match,
+                tags: t.tags || [],
+                wordType: t.wordType || ''
+              });
+              successCount++;
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Batch auto-tag error:", err);
+      }
+      setTagProgress(Math.min(i + BATCH_SIZE, wordsToTag.length));
+    }
+
+    setIsAutoTagging(false);
+    
+    if (allSuggestions.length > 0) {
+      setPendingTagSuggestions(allSuggestions);
+      // Initialize decisions to 'new'
+      const initDecisions = {};
+      allSuggestions.forEach((_, idx) => initDecisions[idx] = 'new');
+      setTagDecisions(initDecisions);
+    }
+
+    setSuccess(`Đã cập nhật tag cho ${successCount} từ vựng!${allSuggestions.length > 0 ? ` Có ${allSuggestions.length} đề xuất tag mới cần bạn duyệt.` : ''}`);
+    setTimeout(() => setSuccess(''), 5000);
+  };
+
 
   const translateToVi = async (text) => {
     try {
@@ -108,6 +222,8 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
     }
 
     let addedCount = 0;
+    const finalWordsToSave = [];
+    const pendingSugg = [];
 
     for (const currentWord of uniqueWordsToAdd) {
       let finalMeaning = meaning.trim();
@@ -115,7 +231,6 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
       let finalExample = example.trim();
       let finalPhonetic = '';
 
-      // Always fetch to try getting phonetic, meaning, and example
       const dictData = await fetchFromDictionary(currentWord);
       if (dictData) {
         if (!finalMeaning) finalMeaning = dictData.fetchedMeaning;
@@ -123,9 +238,7 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
         finalPhonetic = dictData.fetchedPhonetic;
       }
 
-      // Translate to Vietnamese if missing
       if (!finalViMeaning) {
-        // Try to translate the word itself, or its English meaning
         finalViMeaning = await translateToVi(currentWord);
       }
 
@@ -140,9 +253,39 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
         dateAdded: new Date().getTime()
       };
 
-      onAdd(newWordObj);
-      addedCount++;
+      finalWordsToSave.push(newWordObj);
     }
+
+    if (settings?.geminiApiKey && finalWordsToSave.length > 0) {
+      try {
+        const aiTags = await autoTagWords(finalWordsToSave, settings.geminiApiKey, topics, settings.geminiModel);
+        aiTags.forEach(t => {
+          const match = finalWordsToSave.find(w => w.word.toLowerCase() === t.word.toLowerCase());
+          if (match) {
+            if (t.suggestedNewTag) {
+              pendingSugg.push({ wordObj: match, aiTag: t, isUpdate: false });
+            } else {
+              match.tags = t.tags || [];
+              match.wordType = t.wordType || '';
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Auto tag error:", err);
+      }
+    }
+
+    const wordsWithoutSugg = finalWordsToSave.filter(w => !pendingSugg.some(s => s.wordObj.id === w.id));
+    wordsWithoutSugg.forEach(w => onAdd(w));
+    addedCount = wordsWithoutSugg.length;
+
+    if (pendingSugg.length > 0) {
+      setPendingTagSuggestions(pendingSugg);
+      const initDecisions = {};
+      pendingSugg.forEach((_, idx) => initDecisions[idx] = 'new');
+      setTagDecisions(initDecisions);
+    }
+
     
     if (uniqueWordsToAdd.length === 1) {
       setSuccess(`Successfully added "${uniqueWordsToAdd[0]}"!`);
@@ -266,10 +409,40 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
         };
       }));
 
-      if (onAddWords) {
-        onAddWords(newWordsList);
+      let pendingSugg = [];
+
+      if (settings?.geminiApiKey && newWordsList.length > 0) {
+        try {
+          const aiTags = await autoTagWords(newWordsList, settings.geminiApiKey, topics, settings.geminiModel);
+          aiTags.forEach(t => {
+            const match = newWordsList.find(w => w.word.toLowerCase() === t.word.toLowerCase());
+            if (match) {
+              if (t.suggestedNewTag) {
+                pendingSugg.push({ wordObj: match, aiTag: t, isUpdate: false });
+              } else {
+                match.tags = t.tags || [];
+                match.wordType = t.wordType || '';
+              }
+            }
+          });
+        } catch (err) {
+          console.error("Auto tag error:", err);
+        }
+      }
+
+      const wordsWithoutSugg = newWordsList.filter(w => !pendingSugg.some(s => s.wordObj.id === w.id));
+
+      if (onAddWords && wordsWithoutSugg.length > 1) {
+        onAddWords(wordsWithoutSugg);
       } else {
-        newWordsList.forEach(w => onAdd(w));
+        wordsWithoutSugg.forEach(w => onAdd(w));
+      }
+
+      if (pendingSugg.length > 0) {
+        setPendingTagSuggestions(pendingSugg);
+        const initDecisions = {};
+        pendingSugg.forEach((_, idx) => initDecisions[idx] = 'new');
+        setTagDecisions(initDecisions);
       }
 
       setSuccess(`Đã thêm thành công ${newWordsList.length} từ vựng!`);
@@ -307,9 +480,14 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
               <FileSpreadsheet size={16} className="text-gradient" /> Nhập từ Excel / CSV
             </>
           )}
+          {activeAddTab === 'autotag' && (
+            <>
+              <Bot size={16} className="text-gradient" /> AI Auto-Tagging
+            </>
+          )}
         </h2>
         
-        <div style={{ display: 'flex', gap: '0.25rem', background: 'rgba(0,0,0,0.15)', padding: '0.2rem', borderRadius: '8px' }}>
+        <div style={{ display: 'flex', gap: '0.25rem', background: 'rgba(0,0,0,0.15)', padding: '0.2rem', borderRadius: '8px', flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={() => setActiveAddTab('manual')}
@@ -375,6 +553,28 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
             <FileSpreadsheet size={11} />
             Nhập Excel / CSV
           </button>
+          
+          <button
+            type="button"
+            onClick={() => setActiveAddTab('autotag')}
+            style={{
+              border: 'none',
+              background: activeAddTab === 'autotag' ? 'var(--glass-bg)' : 'transparent',
+              color: activeAddTab === 'autotag' ? 'var(--text-main)' : 'var(--text-muted)',
+              padding: '0.25rem 0.6rem',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '0.75rem',
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <Bot size={11} />
+            Auto-Tag Tất cả
+          </button>
         </div>
       </div>
       
@@ -425,10 +625,39 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
       {activeAddTab === 'upload' && (
         <ImportExcelCSV words={words} onAdd={onAdd} onAddWords={onAddWords} onCloseTab={() => setActiveAddTab('manual')} />
       )}
+
+      {activeAddTab === 'autotag' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0.5rem 0' }}>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            Tính năng này sẽ sử dụng AI để tự động phân tích và gắn Chủ đề, Từ loại cho tất cả các từ vựng <strong>hiện đang trống tag</strong> trong thư viện của bạn. Bạn cần nhập Gemini API Key trong phần Settings để sử dụng.
+          </p>
+          
+          {error && <div style={{ color: 'var(--accent-danger)', padding: '0.4rem 0.75rem', background: 'rgba(239,68,68,0.1)', borderRadius: '8px', fontSize: '0.8rem' }}>{error}</div>}
+          {success && <div style={{ color: 'var(--accent-success)', padding: '0.4rem 0.75rem', background: 'rgba(16,185,129,0.1)', borderRadius: '8px', fontSize: '0.8rem' }}>{success}</div>}
+          
+          {isAutoTagging && tagTotal > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                <span>Đang phân tích...</span>
+                <span>{tagProgress} / {tagTotal}</span>
+              </div>
+              <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${(tagProgress / tagTotal) * 100}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent-primary), var(--accent-secondary))', transition: 'width 0.3s ease' }}></div>
+              </div>
+            </div>
+          )}
+
+          <button onClick={handleAutoTagAll} disabled={isAutoTagging} className="btn btn-primary" style={{ alignSelf: 'flex-start' }}>
+            {isAutoTagging ? <Loader2 className="spin" size={16} /> : <Bot size={16} />}
+            {isAutoTagging ? 'Đang tự động gắn Tag...' : 'Bắt đầu gắn Tag hàng loạt'}
+          </button>
+        </div>
+      )}
+
       
       {reviewWordsList && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div style={{ width: '100%', maxWidth: '600px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--bg-dark)', border: '1px solid var(--glass-border)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.75)' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'grid', placeItems: 'center', padding: '1rem', overflowY: 'auto' }}>
+          <div style={{ width: '100%', maxWidth: '600px', maxHeight: 'calc(100vh - 2rem)', display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--bg-dark)', border: '1px solid var(--glass-border)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.75)' }}>
             <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Zap size={20} className="text-gradient" /> Kiểm tra lại từ vựng
             </h3>
@@ -471,6 +700,71 @@ const AddWord = ({ words = [], onAdd, onAddWords }) => {
               <button onClick={confirmQuickAdd} type="button" className="btn btn-primary" style={{ padding: '0.5rem 1rem', borderRadius: '8px' }} disabled={isLoading}>
                 {isLoading ? <Loader2 className="spin" size={16} /> : <Plus size={16} />}
                 {isLoading ? 'Đang thêm...' : 'Xác nhận thêm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingTagSuggestions && pendingTagSuggestions.length > 0 && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'grid', placeItems: 'center', padding: '1rem', overflowY: 'auto' }}>
+          <div style={{ width: '100%', maxWidth: '700px', maxHeight: 'calc(100vh - 2rem)', display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--bg-dark)', border: '1px solid var(--glass-border)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.75)' }}>
+            <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Bot size={20} className="text-gradient" /> Đề xuất Tag Mới từ AI
+            </h3>
+            
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              AI phát hiện <strong>{pendingTagSuggestions.length}</strong> từ vựng không có tag nào phù hợp trong danh sách hiện tại. Bạn vui lòng xem xét các đề xuất dưới đây:
+            </p>
+
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {pendingTagSuggestions.map((item, idx) => (
+                <div key={idx} className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h4 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--accent-primary)' }}>{item.wordObj.word}</h4>
+                    <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', color: 'var(--text-muted)' }}>{item.aiTag.wordType}</span>
+                  </div>
+                  
+                  {item.wordObj.viMeaning && <p style={{ fontSize: '0.85rem', color: 'var(--accent-warning)', margin: 0 }}>{item.wordObj.viMeaning}</p>}
+                  {item.aiTag.reasoning && <p style={{ fontSize: '0.8rem', fontStyle: 'italic', color: 'var(--text-muted)', margin: '0.25rem 0' }}>💡 Lý do: {item.aiTag.reasoning}</p>}
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <label style={{
+                      display: 'flex', gap: '0.5rem', padding: '0.5rem', borderRadius: '8px', cursor: 'pointer',
+                      border: tagDecisions[idx] === 'new' ? '1px solid var(--accent-success)' : '1px solid var(--glass-border)',
+                      background: tagDecisions[idx] === 'new' ? 'rgba(16, 185, 129, 0.1)' : 'transparent',
+                      transition: 'all 0.2s ease'
+                    }}>
+                      <input type="radio" name={`tag-decision-${idx}`} value="new" checked={tagDecisions[idx] === 'new'} onChange={() => setTagDecisions(prev => ({...prev, [idx]: 'new'}))} />
+                      <div style={{ fontSize: '0.85rem' }}>
+                        <span style={{ color: 'var(--accent-success)', fontWeight: 600 }}>Tạo Tag Mới:</span><br/>
+                        {item.aiTag.suggestedNewTag}
+                      </div>
+                    </label>
+
+                    <label style={{
+                      display: 'flex', gap: '0.5rem', padding: '0.5rem', borderRadius: '8px', cursor: 'pointer',
+                      border: tagDecisions[idx] === 'existing' ? '1px solid var(--accent-secondary)' : '1px solid var(--glass-border)',
+                      background: tagDecisions[idx] === 'existing' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                      transition: 'all 0.2s ease'
+                    }}>
+                      <input type="radio" name={`tag-decision-${idx}`} value="existing" checked={tagDecisions[idx] === 'existing'} onChange={() => setTagDecisions(prev => ({...prev, [idx]: 'existing'}))} />
+                      <div style={{ fontSize: '0.85rem' }}>
+                        <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>Dùng Tag Gần Nhất:</span><br/>
+                        {item.aiTag.bestExistingTag || 'Không có'}
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.5rem', flexShrink: 0 }}>
+              <button onClick={() => setPendingTagSuggestions(null)} type="button" className="btn btn-outline" style={{ padding: '0.5rem 1rem', borderRadius: '8px' }}>
+                Hủy bỏ
+              </button>
+              <button onClick={handleSaveTagDecisions} type="button" className="btn btn-primary" style={{ padding: '0.5rem 1rem', borderRadius: '8px' }}>
+                <Plus size={16} /> Lưu Lựa chọn
               </button>
             </div>
           </div>

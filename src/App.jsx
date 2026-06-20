@@ -9,10 +9,12 @@ function App() {
   const { 
     words, 
     settings, 
+    topics,
     addWord, 
     addWords,
     updateWord, 
-    updateSettings, 
+    updateSettings,
+    addTopic, 
     deleteWord, 
     clearAllWords,
     importData,
@@ -76,7 +78,7 @@ function App() {
 
       <main className="main-container" style={{ position: 'relative', width: '100%', height: '100%' }}>
         <div style={{ display: activeTab === 'library' ? 'block' : 'none', height: '100%' }}>
-          <WordList words={words} updateWord={updateWord} deleteWord={deleteWord} addWord={addWord} addWords={addWords} />
+          <WordList words={words} settings={settings} topics={topics} addTopic={addTopic} updateWord={updateWord} deleteWord={deleteWord} addWord={addWord} addWords={addWords} />
         </div>
         
         <div style={{ display: activeTab === 'study' ? 'block' : 'none', height: '100%' }}>
