@@ -237,7 +237,17 @@ const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, rev
     setIsVerifying(true);
     setAiFeedback('');
     try {
-      const prompt = `Người dùng đang học từ vựng tiếng Anh: ${currentSentenceWord.word}. Họ đã đặt câu sau: ${userSentence}. Hãy nhận xét xem câu này có đúng ngữ pháp không, việc sử dụng từ ${currentSentenceWord.word} có tự nhiên không, và gợi ý cách sửa nếu cần. Trả lời ngắn gọn bằng tiếng Việt.`;
+      const prompt = `Bạn là một giáo viên tiếng Anh bản xứ dạy học viên Việt Nam.
+Người dùng đang học từ vựng tiếng Anh sau: "${currentSentenceWord.word}" (nghĩa tiếng Việt: ${currentSentenceWord.viMeaning || 'chưa rõ'}).
+Họ đã đặt câu sau: "${userSentence}".
+
+Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt theo định dạng/tiêu chí sau:
+1. **Ngữ pháp & Độ tự nhiên**: Nhận xét xem câu có đúng ngữ pháp không, diễn đạt tự nhiên không.
+2. **Cách sử dụng từ khóa**: Người dùng có sử dụng từ khóa "${currentSentenceWord.word}" (hoặc các dạng chia từ phù hợp như chia thì, số nhiều, danh động từ...) đúng ngữ cảnh không?
+3. **Gợi ý sửa đổi**: 
+   - Đưa ra phương án sửa đổi hoặc câu viết lại tối ưu nhất nếu câu của người dùng chưa chuẩn.
+   - **RÀNG BUỘC CỰC KỲ QUAN TRỌNG**: Phương án sửa đổi BẮT BUỘC phải giữ lại và sử dụng chính xác từ khóa "${currentSentenceWord.word}" (hoặc biến thể chia từ đúng của nó). TUYỆT ĐỐI KHÔNG ĐƯỢC thay thế từ khóa này bằng các từ đồng nghĩa khác (ví dụ: nếu từ khóa là "wheeling", không được thay thế bằng "pushing", "driving" hay bất kỳ cụm từ nào khác).
+   - Hãy in đậm từ khóa đó trong câu gợi ý để người học dễ nhận biết.`;
       
       const model = settings.geminiModel || 'gemini-2.5-flash-lite';
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.geminiApiKey}`, {
