@@ -86,6 +86,7 @@ function App() {
             words={words} 
             settings={settings} 
             onUpdateWord={updateWord} 
+            onDeleteWord={deleteWord}
             recordReview={recordReview}
             streak={streak}
             reviewHistory={reviewHistory}

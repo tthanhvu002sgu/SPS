@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Check, Brain, Frown, Sparkles, Smile, Coffee, Volume2, Edit, Loader2 } from 'lucide-react';
+import { X, Check, Brain, Frown, Sparkles, Smile, Coffee, Volume2, Edit, Loader2, Trash2 } from 'lucide-react';
 import { processReview } from '../utils/srs';
 import Dashboard from './Dashboard';
 
@@ -8,7 +8,7 @@ const MarkdownText = ({ text }) => {
   if (!text) return null;
   const lines = text.split('\n');
   return (
-    <div style={{ fontSize: '0.95rem', lineHeight: '1.6', color: 'var(--text-main)' }}>
+    <div style={{ fontSize: '0.95rem', lineHeight: '1.6', color: 'var(--text-main)', fontFamily: 'var(--font-family)' }}>
       {lines.map((line, i) => {
         let isList = line.trim().startsWith('* ') || line.trim().startsWith('- ');
         let rawContent = isList ? line.trim().substring(2) : line;
@@ -36,7 +36,7 @@ const MarkdownText = ({ text }) => {
   );
 };
 
-const StudySession = ({ words, settings, onUpdateWord, recordReview, streak, reviewHistory, isActive }) => {
+const StudySession = ({ words, settings, onUpdateWord, onDeleteWord, recordReview, streak, reviewHistory, isActive }) => {
   const [queue, setQueue] = useState([]);
   const [currentWord, setCurrentWord] = useState(null);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -431,6 +431,55 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
     setIsEditing(false);
   };
 
+  const handleDeleteWord = (wordToDelete, e) => {
+    if (e) e.stopPropagation();
+    if (!wordToDelete) return;
+    if (window.confirm(`Bạn có chắc chắn muốn xóa từ "${wordToDelete.word}" không?`)) {
+      if (onDeleteWord) {
+        onDeleteWord(wordToDelete.id);
+      }
+      setIsEditing(false);
+
+      if (sessionPhase === 'flashcards') {
+        const nextQueue = queue.filter(w => w.id !== wordToDelete.id);
+        const nextReviewed = reviewedWords.filter(w => w.id !== wordToDelete.id);
+        setReviewedWords(nextReviewed);
+        setQueue(nextQueue);
+        setIsFlipped(false);
+
+        if (nextQueue.length > 0) {
+          setCurrentWord(nextQueue[0]);
+        } else {
+          const toPractice = nextReviewed
+            .filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i)
+            .sort(() => 0.5 - Math.random());
+            
+          if (toPractice.length > 0) {
+            setSentenceQueue(toPractice);
+            setCurrentSentenceWord(toPractice[0]);
+            setUserSentence('');
+            setAiFeedback('');
+            setSessionPhase('sentence');
+          } else {
+            setSessionComplete(true);
+            setSessionPhase('complete');
+          }
+        }
+      } else if (sessionPhase === 'sentence') {
+        const nextQ = sentenceQueue.filter(w => w.id !== wordToDelete.id);
+        setSentenceQueue(nextQ);
+        setUserSentence('');
+        setAiFeedback('');
+        if (nextQ.length > 0) {
+          setCurrentSentenceWord(nextQ[0]);
+        } else {
+          setSessionComplete(true);
+          setSessionPhase('complete');
+        }
+      }
+    }
+  };
+
   if (!isStudying) {
     const today = new Date().setHours(0,0,0,0);
     const reviewedCount = words.filter(w => w.isReviewedToday).length;
@@ -648,9 +697,19 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
           </div>
           
           <div className="glass-panel" style={{ width: '100%', maxWidth: '600px', padding: '1.5rem', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '1rem', flexShrink: 0 }}>
-            <h3 style={{ fontSize: '1.2rem', textAlign: 'center' }}>
-              Hãy đặt một câu tiếng Anh với từ:
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontSize: '1.2rem', textAlign: 'center', flex: 1, margin: 0 }}>
+                Hãy đặt một câu tiếng Anh với từ:
+              </h3>
+              <button
+                onClick={(e) => handleDeleteWord(currentSentenceWord, e)}
+                className="btn btn-outline"
+                style={{ padding: '0.4rem', borderRadius: '8px', color: 'var(--accent-danger)', borderColor: 'rgba(239,68,68,0.3)' }}
+                title="Xóa từ này"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
             <div style={{ textAlign: 'center' }}>
               <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0 }}>{currentSentenceWord?.word}</h1>
               <p className="text-muted" style={{ fontSize: '1.1rem', marginTop: '0.25rem' }}>{currentSentenceWord?.phonetic}</p>
@@ -840,6 +899,15 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
               <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid var(--glass-border)', paddingTop: '0.75rem', flexShrink: 0 }}>
                 <button
                   type="button"
+                  onClick={(e) => handleDeleteWord(currentWord, e)}
+                  className="btn btn-outline"
+                  style={{ padding: '0.5rem', fontSize: '0.85rem', borderRadius: '8px', color: 'var(--accent-danger)', borderColor: 'rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  title="Xóa từ này"
+                >
+                  <Trash2 size={16} />
+                </button>
+                <button
+                  type="button"
                   onClick={handleCancelEdit}
                   className="btn btn-outline"
                   style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem', borderRadius: '8px' }}
@@ -863,15 +931,25 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
                 <div className="flashcard-front">
                   <p className="text-muted" style={{ position: 'absolute', top: '1rem', textTransform: 'uppercase', letterSpacing: '2px', fontSize: '0.7rem' }}>Tap or Space to flip</p>
                   
-                  {/* Edit Card Button (Front) */}
-                  <button 
-                    onClick={handleStartEdit} 
-                    className="btn btn-outline" 
-                    style={{ position: 'absolute', top: '1rem', left: '1rem', padding: '0.4rem', borderRadius: '50%', border: 'none', background: 'transparent' }}
-                    title="Chỉnh sửa thẻ"
-                  >
-                    <Edit size={18} className="text-muted" />
-                  </button>
+                  {/* Edit & Delete Buttons (Front) */}
+                  <div style={{ position: 'absolute', top: '1rem', left: '1rem', display: 'flex', gap: '0.25rem', zIndex: 10 }}>
+                    <button 
+                      onClick={handleStartEdit} 
+                      className="btn btn-outline" 
+                      style={{ padding: '0.4rem', borderRadius: '50%', border: 'none', background: 'transparent' }}
+                      title="Chỉnh sửa thẻ"
+                    >
+                      <Edit size={18} className="text-muted" />
+                    </button>
+                    <button 
+                      onClick={(e) => handleDeleteWord(currentWord, e)} 
+                      className="btn btn-outline" 
+                      style={{ padding: '0.4rem', borderRadius: '50%', border: 'none', background: 'transparent', color: 'var(--accent-danger)' }}
+                      title="Xóa từ này"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
 
                   {/* Active Mode Badge */}
                   <div style={{
@@ -916,15 +994,25 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
                 
                 {/* Back side of the card */}
                 <div className="flashcard-back">
-                  {/* Edit Card Button (Back) */}
-                  <button 
-                    onClick={handleStartEdit} 
-                    className="btn btn-outline" 
-                    style={{ position: 'absolute', top: '1rem', left: '1rem', padding: '0.4rem', borderRadius: '50%', border: 'none', background: 'transparent' }}
-                    title="Chỉnh sửa thẻ"
-                  >
-                    <Edit size={18} className="text-muted" />
-                  </button>
+                  {/* Edit & Delete Buttons (Back) */}
+                  <div style={{ position: 'absolute', top: '1rem', left: '1rem', display: 'flex', gap: '0.25rem', zIndex: 10 }}>
+                    <button 
+                      onClick={handleStartEdit} 
+                      className="btn btn-outline" 
+                      style={{ padding: '0.4rem', borderRadius: '50%', border: 'none', background: 'transparent' }}
+                      title="Chỉnh sửa thẻ"
+                    >
+                      <Edit size={18} className="text-muted" />
+                    </button>
+                    <button 
+                      onClick={(e) => handleDeleteWord(currentWord, e)} 
+                      className="btn btn-outline" 
+                      style={{ padding: '0.4rem', borderRadius: '50%', border: 'none', background: 'transparent', color: 'var(--accent-danger)' }}
+                      title="Xóa từ này"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
 
                   {/* Active Mode Badge on Back */}
                   <div style={{
