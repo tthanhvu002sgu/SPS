@@ -1,6 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Check, Brain, Frown, Sparkles, Smile, Coffee, Volume2, Edit, Loader2, Trash2 } from 'lucide-react';
+import {
+  Brain,
+  Frown,
+  Sparkles,
+  Coffee,
+  Volume2,
+  Edit,
+  Loader2,
+  Trash2,
+  Undo2,
+  SkipForward,
+} from 'lucide-react';
 import { processReview } from '../utils/srs';
 import Dashboard from './Dashboard';
 
@@ -10,9 +21,8 @@ const MarkdownText = ({ text }) => {
   return (
     <div style={{ fontSize: '0.95rem', lineHeight: '1.6', color: 'var(--text-main)', fontFamily: 'var(--font-family)' }}>
       {lines.map((line, i) => {
-        let isList = line.trim().startsWith('* ') || line.trim().startsWith('- ');
-        let rawContent = isList ? line.trim().substring(2) : line;
-        
+        const isList = line.trim().startsWith('* ') || line.trim().startsWith('- ');
+        const rawContent = isList ? line.trim().substring(2) : line;
         const formatted = rawContent
           .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
           .replace(/\*(.*?)\*/g, '<em>$1</em>');
@@ -25,9 +35,7 @@ const MarkdownText = ({ text }) => {
             </div>
           );
         }
-        if (line.trim() === '') {
-          return <div key={i} style={{ height: '0.8rem' }} />;
-        }
+        if (line.trim() === '') return <div key={i} style={{ height: '0.8rem' }} />;
         return (
           <div key={i} style={{ marginBottom: '0.4rem' }} dangerouslySetInnerHTML={{ __html: formatted }} />
         );
@@ -36,7 +44,18 @@ const MarkdownText = ({ text }) => {
   );
 };
 
-const StudySession = ({ words, settings, onUpdateWord, onDeleteWord, recordReview, streak, reviewHistory, isActive }) => {
+const StudySession = ({
+  words,
+  settings,
+  topics = [],
+  onUpdateWord,
+  onDeleteWord,
+  recordReview,
+  undoRecordReview,
+  streak,
+  reviewHistory,
+  isActive,
+}) => {
   const [queue, setQueue] = useState([]);
   const [currentWord, setCurrentWord] = useState(null);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -45,8 +64,11 @@ const StudySession = ({ words, settings, onUpdateWord, onDeleteWord, recordRevie
   const [isStudying, setIsStudying] = useState(false);
   const [randomFrontBack, setRandomFrontBack] = useState(false);
   const [showReverse, setShowReverse] = useState(false);
+  const [skipSentenceThisSession, setSkipSentenceThisSession] = useState(false);
+  const [filterTag, setFilterTag] = useState('');
+  const [sessionTotal, setSessionTotal] = useState(0);
+  const [undoStack, setUndoStack] = useState(null);
 
-  // Edit Card states
   const [isEditing, setIsEditing] = useState(false);
   const [editWord, setEditWord] = useState('');
   const [editPhonetic, setEditPhonetic] = useState('');
@@ -56,8 +78,7 @@ const StudySession = ({ words, settings, onUpdateWord, onDeleteWord, recordRevie
   const [isAutoLoading, setIsAutoLoading] = useState(false);
   const [editError, setEditError] = useState('');
 
-  // Sentence Practice States
-  const [sessionPhase, setSessionPhase] = useState('flashcards'); // flashcards, sentence, complete
+  const [sessionPhase, setSessionPhase] = useState('flashcards');
   const [reviewedWords, setReviewedWords] = useState([]);
   const [sentenceQueue, setSentenceQueue] = useState([]);
   const [currentSentenceWord, setCurrentSentenceWord] = useState(null);
@@ -65,15 +86,30 @@ const StudySession = ({ words, settings, onUpdateWord, onDeleteWord, recordRevie
   const [aiFeedback, setAiFeedback] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
 
-  // Helpers for API Lookup inside Edit
+  const gradeRef = useRef(null);
+
+  const availableTags = useMemo(() => {
+    const set = new Set();
+    words.forEach((w) => (w.tags || []).forEach((t) => set.add(t)));
+    (topics || []).forEach((t) => set.add(t));
+    return Array.from(set).sort();
+  }, [words, topics]);
+
+  const filteredPool = useMemo(() => {
+    if (!filterTag) return words;
+    return words.filter((w) => (w.tags || []).includes(filterTag));
+  }, [words, filterTag]);
+
   const translateToVi = async (text) => {
     try {
-      const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(text)}`);
+      const res = await fetch(
+        `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(text)}`
+      );
       const data = await res.json();
       return data[0][0][0];
     } catch (e) {
-      console.error("Translation error", e);
-      return "";
+      console.error('Translation error', e);
+      return '';
     }
   };
 
@@ -83,20 +119,16 @@ const StudySession = ({ words, settings, onUpdateWord, onDeleteWord, recordRevie
       if (!response.ok) return null;
       const json = await response.json();
       const data = json[0];
-      
       let fetchedMeaning = '';
       let fetchedExample = '';
       let fetchedPhonetic = data.phonetic || '';
-
       if (!fetchedPhonetic && data.phonetics) {
-        const p = data.phonetics.find(ph => ph.text);
+        const p = data.phonetics.find((ph) => ph.text);
         if (p) fetchedPhonetic = p.text;
       }
-
-      if (data.meanings && data.meanings.length > 0) {
+      if (data.meanings?.length > 0) {
         fetchedMeaning = data.meanings[0].definitions[0]?.definition || '';
         fetchedExample = data.meanings[0].definitions[0]?.example || '';
-
         for (const meaning of data.meanings) {
           for (const def of meaning.definitions) {
             if (def.example) {
@@ -115,7 +147,6 @@ const StudySession = ({ words, settings, onUpdateWord, onDeleteWord, recordRevie
     }
   };
 
-  // Set random orientation when currentWord changes
   useEffect(() => {
     if (currentWord && randomFrontBack) {
       setShowReverse(Math.random() < 0.5);
@@ -124,38 +155,56 @@ const StudySession = ({ words, settings, onUpdateWord, onDeleteWord, recordRevie
     }
   }, [currentWord, randomFrontBack]);
 
-  const handleStartStudy = () => {
-    if (practiceMode) {
-      const shuffled = [...words].sort(() => 0.5 - Math.random());
-      setQueue(shuffled);
-      setReviewedWords([]);
-      if (shuffled.length > 0) {
-        setCurrentWord(shuffled[0]);
-        setSessionComplete(false);
-        setSessionPhase('flashcards');
-      } else {
-        setSessionComplete(true);
-        setSessionPhase('complete');
-      }
-    } else {
-      const today = new Date().setHours(0,0,0,0);
-      const reviewedCount = words.filter(w => w.isReviewedToday).length;
-      
-      const remainingQuota = Math.max(0, settings.dailyLimit - reviewedCount);
-      let dueWords = words.filter(w => w.nextReviewDate <= today && !w.isReviewedToday);
-      dueWords.sort((a, b) => a.nextReviewDate - b.nextReviewDate);
-      dueWords = dueWords.slice(0, remainingQuota);
+  const finishFlashcards = useCallback(
+    (finalReviewed) => {
+      const enableSentence = settings.enableSentencePractice !== false && !skipSentenceThisSession;
+      let toPractice = finalReviewed
+        .filter((v, i, a) => a.findIndex((t) => t.id === v.id) === i)
+        .sort(() => 0.5 - Math.random());
 
-      setQueue(dueWords);
-      setReviewedWords([]);
-      if (dueWords.length > 0) {
-        setCurrentWord(dueWords[0]);
-        setSessionComplete(false);
-        setSessionPhase('flashcards');
+      const maxN = Number(settings.maxSentenceWords);
+      if (Number.isFinite(maxN) && maxN > 0) {
+        toPractice = toPractice.slice(0, maxN);
+      }
+
+      if (enableSentence && toPractice.length > 0) {
+        setSentenceQueue(toPractice);
+        setCurrentSentenceWord(toPractice[0]);
+        setUserSentence('');
+        setAiFeedback('');
+        setSessionPhase('sentence');
       } else {
         setSessionComplete(true);
         setSessionPhase('complete');
       }
+    },
+    [settings.enableSentencePractice, settings.maxSentenceWords, skipSentenceThisSession]
+  );
+
+  const handleStartStudy = () => {
+    let list;
+    if (practiceMode) {
+      list = [...filteredPool].sort(() => 0.5 - Math.random());
+    } else {
+      const today = new Date().setHours(0, 0, 0, 0);
+      const reviewedCount = filteredPool.filter((w) => w.isReviewedToday).length;
+      const remainingQuota = Math.max(0, settings.dailyLimit - reviewedCount);
+      let dueWords = filteredPool.filter((w) => w.nextReviewDate <= today && !w.isReviewedToday);
+      dueWords.sort((a, b) => a.nextReviewDate - b.nextReviewDate);
+      list = dueWords.slice(0, remainingQuota);
+    }
+
+    setQueue(list);
+    setSessionTotal(list.length);
+    setReviewedWords([]);
+    setUndoStack(null);
+    if (list.length > 0) {
+      setCurrentWord(list[0]);
+      setSessionComplete(false);
+      setSessionPhase('flashcards');
+    } else {
+      setSessionComplete(true);
+      setSessionPhase('complete');
     }
     setIsStudying(true);
   };
@@ -168,69 +217,98 @@ const StudySession = ({ words, settings, onUpdateWord, onDeleteWord, recordRevie
     setQueue([]);
     setSentenceQueue([]);
     setIsEditing(false);
+    setUndoStack(null);
   };
 
-  const handleFlip = () => {
-    setIsFlipped(true);
-  };
+  const handleFlip = () => setIsFlipped(true);
 
-  const handleGrade = (grade) => {
-    if (!practiceMode) {
-      const updatedWord = processReview(currentWord, grade, settings.intervalMultiplier || 1);
-      onUpdateWord(updatedWord);
-    }
-    
-    if (recordReview) {
-      recordReview(currentWord.id, grade);
-    }
-    
-    if (grade > 0) {
-      setReviewedWords(prev => {
-        if (!prev.find(w => w.id === currentWord.id)) {
-          return [...prev, currentWord];
-        }
-        return prev;
+  const handleGrade = useCallback(
+    (grade) => {
+      if (!currentWord) return;
+
+      const previousWord = { ...currentWord };
+      let updatedWord = currentWord;
+      if (!practiceMode) {
+        updatedWord = processReview(currentWord, grade, settings.intervalMultiplier || 1);
+        onUpdateWord(updatedWord);
+      }
+
+      if (recordReview) recordReview(currentWord.id, grade);
+
+      const nextReviewed =
+        grade > 0 && !reviewedWords.find((w) => w.id === currentWord.id)
+          ? [...reviewedWords, currentWord]
+          : reviewedWords;
+
+      if (grade > 0) setReviewedWords(nextReviewed);
+
+      setUndoStack({
+        previousWord,
+        grade,
+        practiceMode,
+        queueSnapshot: queue,
+        reviewedSnapshot: reviewedWords,
+        wasUpdated: !practiceMode,
+        updatedWordId: updatedWord.id,
       });
-    }
 
-    setIsFlipped(false);
-    
-    const newQueue = queue.slice(1);
-    setQueue(newQueue);
-    
-    if (newQueue.length > 0) {
-      setTimeout(() => {
-        setCurrentWord(newQueue[0]);
-      }, 150);
-    } else {
-      // Transition to sentence making phase
-      let finalReviewed = [...reviewedWords];
-      if (grade > 0 && !finalReviewed.find(w => w.id === currentWord.id)) {
-        finalReviewed.push(currentWord);
-      }
+      setIsFlipped(false);
+      const newQueue = queue.slice(1);
+      setQueue(newQueue);
 
-      const toPractice = finalReviewed
-        .filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i)
-        .sort(() => 0.5 - Math.random());
-        
-      if (toPractice.length > 0) {
-        setSentenceQueue(toPractice);
-        setCurrentSentenceWord(toPractice[0]);
-        setUserSentence('');
-        setAiFeedback('');
-        setSessionPhase('sentence');
+      if (newQueue.length > 0) {
+        setTimeout(() => setCurrentWord(newQueue[0]), 150);
       } else {
-        setSessionComplete(true);
-        setSessionPhase('complete');
+        finishFlashcards(nextReviewed);
       }
+    },
+    [
+      currentWord,
+      practiceMode,
+      settings.intervalMultiplier,
+      onUpdateWord,
+      recordReview,
+      reviewedWords,
+      queue,
+      finishFlashcards,
+    ]
+  );
+
+  gradeRef.current = handleGrade;
+
+  const handleUndo = () => {
+    if (!undoStack || sessionPhase !== 'flashcards') return;
+    const {
+      previousWord,
+      grade,
+      practiceMode: wasPractice,
+      queueSnapshot,
+      reviewedSnapshot,
+      wasUpdated,
+    } = undoStack;
+
+    if (wasUpdated) {
+      onUpdateWord(previousWord);
     }
+    if (undoRecordReview) {
+      undoRecordReview(previousWord.id, grade);
+    }
+
+    setQueue(queueSnapshot);
+    setReviewedWords(reviewedSnapshot);
+    setCurrentWord(previousWord);
+    setIsFlipped(true);
+    setUndoStack(null);
+    setSessionComplete(false);
+    setSessionPhase('flashcards');
   };
 
   const handleVerifySentence = async () => {
     if (!userSentence.trim() || !currentSentenceWord) return;
-    
     if (!settings.geminiApiKey) {
-      setAiFeedback('Vui lòng vào phần Cài đặt (Settings) để nhập Gemini API Key trước khi sử dụng tính năng này.');
+      setAiFeedback(
+        'Vui lòng vào phần Cài đặt để nhập Gemini API Key trước khi dùng tính năng này.'
+      );
       return;
     }
 
@@ -246,28 +324,28 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
 2. **Cách sử dụng từ khóa**: Người dùng có sử dụng từ khóa "${currentSentenceWord.word}" (hoặc các dạng chia từ phù hợp như chia thì, số nhiều, danh động từ...) đúng ngữ cảnh không?
 3. **Gợi ý sửa đổi**: 
    - Đưa ra phương án sửa đổi hoặc câu viết lại tối ưu nhất nếu câu của người dùng chưa chuẩn.
-   - **RÀNG BUỘC CỰC KỲ QUAN TRỌNG**: Phương án sửa đổi BẮT BUỘC phải giữ lại và sử dụng chính xác từ khóa "${currentSentenceWord.word}" (hoặc biến thể chia từ đúng của nó). TUYỆT ĐỐI KHÔNG ĐƯỢC thay thế từ khóa này bằng các từ đồng nghĩa khác (ví dụ: nếu từ khóa là "wheeling", không được thay thế bằng "pushing", "driving" hay bất kỳ cụm từ nào khác).
+   - **RÀNG BUỘC CỰC KỲ QUAN TRỌNG**: Phương án sửa đổi BẮT BUỘC phải giữ lại và sử dụng chính xác từ khóa "${currentSentenceWord.word}" (hoặc biến thể chia từ đúng của nó). TUYỆT ĐỐI KHÔNG ĐƯỢC thay thế từ khóa này bằng các từ đồng nghĩa khác.
    - Hãy in đậm từ khóa đó trong câu gợi ý để người học dễ nhận biết.`;
-      
+
       const model = settings.geminiModel || 'gemini-2.5-flash-lite';
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.geminiApiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }]
-        })
-      });
-      
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        }
+      );
+
       const data = await res.json();
-      
       if (data.error) {
         setAiFeedback('Lỗi từ API: ' + data.error.message);
-      } else if (data.candidates && data.candidates.length > 0) {
+      } else if (data.candidates?.length > 0) {
         setAiFeedback(data.candidates[0].content.parts[0].text);
       } else {
         setAiFeedback('Không nhận được phản hồi hợp lệ từ AI.');
       }
-    } catch (e) {
+    } catch {
       setAiFeedback('Lỗi mạng: Không thể kết nối tới Google API.');
     }
     setIsVerifying(false);
@@ -286,6 +364,12 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
     }
   };
 
+  const handleSkipAllSentences = () => {
+    setSessionPhase('complete');
+    setSessionComplete(true);
+    setSentenceQueue([]);
+  };
+
   useEffect(() => {
     if (!isActive || sessionPhase !== 'sentence') return;
 
@@ -294,10 +378,11 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
         if (e.target.tagName === 'BUTTON') return;
         e.preventDefault();
         if (aiFeedback) {
-          const isError = aiFeedback.startsWith('Lỗi') || aiFeedback.startsWith('Không') || aiFeedback.includes('Vui lòng vào phần Cài đặt');
-          if (!isError) {
-            handleNextSentence();
-          }
+          const isError =
+            aiFeedback.startsWith('Lỗi') ||
+            aiFeedback.startsWith('Không') ||
+            aiFeedback.includes('Vui lòng vào phần Cài đặt');
+          if (!isError) handleNextSentence();
         } else if (userSentence.trim() && !isVerifying) {
           handleVerifySentence();
         }
@@ -308,41 +393,43 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
     return () => window.removeEventListener('keydown', handleSentenceKey);
   });
 
-  const speakWord = React.useCallback((text, e) => {
-    if (e) e.stopPropagation(); // prevent flipping the card when clicking the speaker icon
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      
-      if (settings.voiceURI) {
-        const voices = window.speechSynthesis.getVoices();
-        const selectedVoice = voices.find(v => v.voiceURI === settings.voiceURI);
-        if (selectedVoice) {
-          utterance.voice = selectedVoice;
+  const speakWord = React.useCallback(
+    (text, e) => {
+      if (e) e.stopPropagation();
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        if (settings.voiceURI) {
+          const voices = window.speechSynthesis.getVoices();
+          const selectedVoice = voices.find((v) => v.voiceURI === settings.voiceURI);
+          if (selectedVoice) utterance.voice = selectedVoice;
+        } else {
+          utterance.lang = 'en-US';
         }
-      } else {
-        utterance.lang = 'en-US';
+        utterance.rate = 0.9;
+        window.speechSynthesis.speak(utterance);
       }
-      
-      // slightly slower for clarity
-      utterance.rate = 0.9;
-      window.speechSynthesis.speak(utterance);
-    }
-  }, [settings.voiceURI]);
+    },
+    [settings.voiceURI]
+  );
 
   useEffect(() => {
     if (!isActive) return;
 
     const handleKeyDown = (e) => {
-      if (isEditing || sessionPhase === 'sentence') return; // Disable key bindings during card editing or sentence making
+      if (isEditing || sessionPhase === 'sentence') return;
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (sessionComplete || !currentWord) return;
 
+      if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+
       if (e.key === 'Control' || e.key === 'Enter') {
         e.preventDefault();
-        if (!showReverse || isFlipped) {
-          speakWord(currentWord.word);
-        }
+        if (!showReverse || isFlipped) speakWord(currentWord.word);
         return;
       }
 
@@ -354,21 +441,28 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
       } else {
         if (e.key === '1') {
           e.preventDefault();
-          handleGrade(0);
+          gradeRef.current?.(0);
         } else if (e.key === '2') {
           e.preventDefault();
-          handleGrade(3);
+          gradeRef.current?.(3);
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isActive, isFlipped, sessionComplete, currentWord, queue, practiceMode, settings, handleGrade, speakWord, showReverse, isEditing]);
+  }, [
+    isActive,
+    isFlipped,
+    sessionComplete,
+    currentWord,
+    speakWord,
+    showReverse,
+    isEditing,
+    sessionPhase,
+    undoStack,
+  ]);
 
-  // Audio is now triggered manually via Enter/Control key instead of automatically on load/flip.
-
-  // Edit action handlers
   const handleStartEdit = (e) => {
     if (e) e.stopPropagation();
     if (!currentWord) return;
@@ -397,13 +491,9 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
         if (dictData.fetchedMeaning) setEditMeaning(dictData.fetchedMeaning);
         if (dictData.fetchedExample) setEditExample(dictData.fetchedExample);
       }
-      
       const translated = await translateToVi(editWord.trim());
-      if (translated) {
-        setEditViMeaning(translated);
-      }
-    } catch (err) {
-      console.error(err);
+      if (translated) setEditViMeaning(translated);
+    } catch {
       setEditError('Lỗi khi tự động tra cứu từ vựng.');
     } finally {
       setIsAutoLoading(false);
@@ -415,97 +505,107 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
       setEditError('Từ tiếng Anh không được để trống.');
       return;
     }
-    
     const updatedWord = {
       ...currentWord,
       word: editWord.trim(),
       phonetic: editPhonetic.trim(),
       meaning: editMeaning.trim(),
       viMeaning: editViMeaning.trim(),
-      example: editExample.trim()
+      example: editExample.trim(),
     };
-    
     onUpdateWord(updatedWord);
     setCurrentWord(updatedWord);
-    setQueue(prev => prev.map(w => w.id === updatedWord.id ? updatedWord : w));
+    setQueue((prev) => prev.map((w) => (w.id === updatedWord.id ? updatedWord : w)));
     setIsEditing(false);
   };
 
   const handleDeleteWord = (wordToDelete, e) => {
     if (e) e.stopPropagation();
     if (!wordToDelete) return;
-    if (window.confirm(`Bạn có chắc chắn muốn xóa từ "${wordToDelete.word}" không?`)) {
-      if (onDeleteWord) {
-        onDeleteWord(wordToDelete.id);
+    if (!window.confirm(`Xóa từ "${wordToDelete.word}"?`)) return;
+    if (onDeleteWord) onDeleteWord(wordToDelete.id);
+    setIsEditing(false);
+    setUndoStack(null);
+
+    if (sessionPhase === 'flashcards') {
+      const nextQueue = queue.filter((w) => w.id !== wordToDelete.id);
+      const nextReviewed = reviewedWords.filter((w) => w.id !== wordToDelete.id);
+      setReviewedWords(nextReviewed);
+      setQueue(nextQueue);
+      setIsFlipped(false);
+      if (nextQueue.length > 0) {
+        setCurrentWord(nextQueue[0]);
+      } else {
+        finishFlashcards(nextReviewed);
       }
-      setIsEditing(false);
-
-      if (sessionPhase === 'flashcards') {
-        const nextQueue = queue.filter(w => w.id !== wordToDelete.id);
-        const nextReviewed = reviewedWords.filter(w => w.id !== wordToDelete.id);
-        setReviewedWords(nextReviewed);
-        setQueue(nextQueue);
-        setIsFlipped(false);
-
-        if (nextQueue.length > 0) {
-          setCurrentWord(nextQueue[0]);
-        } else {
-          const toPractice = nextReviewed
-            .filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i)
-            .sort(() => 0.5 - Math.random());
-            
-          if (toPractice.length > 0) {
-            setSentenceQueue(toPractice);
-            setCurrentSentenceWord(toPractice[0]);
-            setUserSentence('');
-            setAiFeedback('');
-            setSessionPhase('sentence');
-          } else {
-            setSessionComplete(true);
-            setSessionPhase('complete');
-          }
-        }
-      } else if (sessionPhase === 'sentence') {
-        const nextQ = sentenceQueue.filter(w => w.id !== wordToDelete.id);
-        setSentenceQueue(nextQ);
-        setUserSentence('');
-        setAiFeedback('');
-        if (nextQ.length > 0) {
-          setCurrentSentenceWord(nextQ[0]);
-        } else {
-          setSessionComplete(true);
-          setSessionPhase('complete');
-        }
+    } else if (sessionPhase === 'sentence') {
+      const nextQ = sentenceQueue.filter((w) => w.id !== wordToDelete.id);
+      setSentenceQueue(nextQ);
+      setUserSentence('');
+      setAiFeedback('');
+      if (nextQ.length > 0) setCurrentSentenceWord(nextQ[0]);
+      else {
+        setSessionComplete(true);
+        setSessionPhase('complete');
       }
     }
   };
 
+  const doneCount = Math.max(0, sessionTotal - queue.length);
+  const progressPct = sessionTotal > 0 ? Math.round((doneCount / sessionTotal) * 100) : 0;
+
   if (!isStudying) {
-    const today = new Date().setHours(0,0,0,0);
-    const reviewedCount = words.filter(w => w.isReviewedToday).length;
+    const today = new Date().setHours(0, 0, 0, 0);
+    const reviewedCount = filteredPool.filter((w) => w.isReviewedToday).length;
     const remainingQuota = Math.max(0, settings.dailyLimit - reviewedCount);
-    let dueWords = words.filter(w => w.nextReviewDate <= today && !w.isReviewedToday);
+    const dueWords = filteredPool.filter((w) => w.nextReviewDate <= today && !w.isReviewedToday);
     const dueCount = Math.min(dueWords.length, remainingQuota);
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '1rem', overflowY: 'auto', paddingBottom: '1.5rem' }}>
-        {/* Full Dashboard Stats & Chart */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          width: '100%',
+          height: '100%',
+          gap: '1rem',
+          overflowY: 'auto',
+          paddingBottom: '1.5rem',
+        }}
+      >
         <Dashboard words={words} streak={streak} reviewHistory={reviewHistory} compact={false} />
 
-        {/* Study Goal Card */}
-        <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <div
+          className="glass-panel"
+          style={{
+            padding: '1.5rem',
+            borderRadius: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1.25rem',
+          }}
+        >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
-              Mục tiêu học tập hôm nay
+              Mục tiêu học hôm nay
             </h3>
             <p className="text-muted" style={{ fontSize: '0.85rem' }}>
-              Hãy chọn chế độ học và bắt đầu ôn tập để duy trì streak của bạn nhé!
+              Chọn chế độ, lọc theo chủ đề nếu cần, rồi bắt đầu ôn để giữ streak.
             </p>
           </div>
 
-          {/* Mode Switcher Buttons */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'rgba(0,0,0,0.15)', padding: '0.25rem', borderRadius: '12px' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '0.5rem',
+              background: 'rgba(0,0,0,0.08)',
+              padding: '0.25rem',
+              borderRadius: '12px',
+            }}
+          >
             <button
+              type="button"
               onClick={() => setPracticeMode(false)}
               style={{
                 border: 'none',
@@ -516,17 +616,13 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
                 cursor: 'pointer',
                 fontSize: '0.85rem',
                 fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.4rem',
-                transition: 'all 0.2s ease',
-                boxShadow: !practiceMode ? '0 2px 8px rgba(0,0,0,0.2)' : 'none'
+                boxShadow: !practiceMode ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
               }}
             >
-              <span>○ SRS Mode (Hàng ngày)</span>
+              SRS (hàng ngày)
             </button>
             <button
+              type="button"
               onClick={() => setPracticeMode(true)}
               style={{
                 border: 'none',
@@ -537,21 +633,60 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
                 cursor: 'pointer',
                 fontSize: '0.85rem',
                 fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.4rem',
-                transition: 'all 0.2s ease',
-                boxShadow: practiceMode ? '0 2px 8px rgba(0,0,0,0.2)' : 'none'
+                boxShadow: practiceMode ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
               }}
             >
-              <span>● Practice Mode (Tự do)</span>
+              Luyện tự do
             </button>
           </div>
 
-          {/* Session Info & Summary */}
-          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', padding: '1rem', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(59, 130, 246, 0.1))', color: 'var(--accent-primary)', padding: '0.75rem', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {availableTags.length > 0 && (
+            <div>
+              <p style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+                Lọc theo chủ đề (tag)
+              </p>
+              <div className="filter-chips">
+                <button
+                  type="button"
+                  className={`chip ${!filterTag ? 'chip-active' : ''}`}
+                  onClick={() => setFilterTag('')}
+                >
+                  Tất cả
+                </button>
+                {availableTags.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    className={`chip ${filterTag === t ? 'chip-active' : ''}`}
+                    onClick={() => setFilterTag(filterTag === t ? '' : t)}
+                  >
+                    #{t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div
+            style={{
+              background: 'rgba(128,128,128,0.06)',
+              border: '1px solid var(--glass-border)',
+              padding: '1rem',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1rem',
+            }}
+          >
+            <div
+              style={{
+                background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(59, 130, 246, 0.12))',
+                color: 'var(--accent-primary)',
+                padding: '0.75rem',
+                borderRadius: '50%',
+                display: 'flex',
+              }}
+            >
               <Brain size={24} />
             </div>
             <div style={{ flex: 1 }}>
@@ -559,89 +694,126 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
                 <>
                   <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>
                     {dueCount > 0 ? (
-                      <>Hôm nay bạn có <span style={{ color: 'var(--accent-primary)', fontWeight: '800' }}>{dueCount}</span> từ cần ôn tập.</>
+                      <>
+                        Hôm nay có{' '}
+                        <span style={{ color: 'var(--accent-primary)', fontWeight: 800 }}>{dueCount}</span> từ
+                        cần ôn
+                        {filterTag ? ` (#${filterTag})` : ''}.
+                      </>
                     ) : (
-                      <span style={{ color: 'var(--accent-success)' }}>Tuyệt vời! Bạn đã hoàn thành tất cả từ vựng hôm nay.</span>
+                      <span style={{ color: 'var(--accent-success)' }}>
+                        {words.length === 0
+                          ? 'Chưa có từ nào — vào Thư viện để thêm từ nhé!'
+                          : filterTag
+                            ? `Không còn từ #${filterTag} đến hạn hôm nay.`
+                            : 'Tuyệt vời! Bạn đã xong bài SRS hôm nay.'}
+                      </span>
                     )}
                   </div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                    {dueCount > 0 ? "Từ vựng được lựa chọn dựa trên thuật toán lặp lại ngắt quãng (SRS)." : "Hãy chuyển sang Practice Mode để ôn luyện thêm."}
+                    {dueCount > 0
+                      ? 'Hàng đợi theo thuật toán lặp lại ngắt quãng (SRS).'
+                      : words.length === 0
+                        ? 'Thêm từ thủ công, nhanh, hoặc import Excel/CSV.'
+                        : 'Chuyển Luyện tự do để ôn thêm, hoặc lọc tag khác.'}
                   </div>
                 </>
               ) : (
                 <>
                   <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>
-                    Luyện tập tự do với <span style={{ color: 'var(--accent-primary)', fontWeight: '800' }}>{words.length}</span> từ vựng hiện có.
+                    Luyện tự do với{' '}
+                    <span style={{ color: 'var(--accent-primary)', fontWeight: 800 }}>
+                      {filteredPool.length}
+                    </span>{' '}
+                    từ{filterTag ? ` (#${filterTag})` : ''}.
                   </div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                    Chế độ này không giới hạn số lượng và không ảnh hưởng đến lịch ôn tập SRS hàng ngày.
+                    Không giới hạn quota và không ảnh hưởng lịch SRS.
                   </div>
                 </>
               )}
             </div>
           </div>
 
-          {/* Settings Options */}
-          <div style={{
-            background: 'rgba(255,255,255,0.02)',
-            padding: '0.75rem 1rem',
-            borderRadius: '12px',
-            border: '1px solid var(--glass-border)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            cursor: 'pointer',
-            userSelect: 'none'
-          }} onClick={() => setRandomFrontBack(prev => !prev)}>
-            <input 
-              type="checkbox" 
-              checked={randomFrontBack} 
+          <div
+            style={{
+              background: 'rgba(128,128,128,0.05)',
+              padding: '0.75rem 1rem',
+              borderRadius: '12px',
+              border: '1px solid var(--glass-border)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              cursor: 'pointer',
+              userSelect: 'none',
+            }}
+            onClick={() => setRandomFrontBack((p) => !p)}
+          >
+            <input
+              type="checkbox"
+              checked={randomFrontBack}
               onChange={(e) => {
                 e.stopPropagation();
                 setRandomFrontBack(e.target.checked);
               }}
-              style={{
-                width: '18px',
-                height: '18px',
-                borderRadius: '4px',
-                accentColor: 'var(--accent-primary)',
-                cursor: 'pointer'
-              }}
+              style={{ width: 18, height: 18, accentColor: 'var(--accent-primary)', cursor: 'pointer' }}
             />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                Xáo trộn mặt Thẻ (Mặt trước ↔ Mặt sau)
-              </span>
-              <span className="text-muted" style={{ fontSize: '0.75rem' }}>
-                Học ngẫu nhiên từ Anh ➔ Việt và Việt ➔ Anh để tăng độ nhớ từ vựng.
-              </span>
+            <div>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Xáo trộn mặt thẻ (Anh ↔ Việt)</span>
+              <div className="text-muted" style={{ fontSize: '0.75rem' }}>
+                Học ngẫu nhiên cả hai chiều để nhớ chắc hơn.
+              </div>
             </div>
           </div>
 
-          {/* Big CTA Start Button */}
+          <div
+            style={{
+              background: 'rgba(128,128,128,0.05)',
+              padding: '0.75rem 1rem',
+              borderRadius: '12px',
+              border: '1px solid var(--glass-border)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              cursor: 'pointer',
+              userSelect: 'none',
+            }}
+            onClick={() => setSkipSentenceThisSession((p) => !p)}
+          >
+            <input
+              type="checkbox"
+              checked={skipSentenceThisSession}
+              onChange={(e) => {
+                e.stopPropagation();
+                setSkipSentenceThisSession(e.target.checked);
+              }}
+              style={{ width: 18, height: 18, accentColor: 'var(--accent-primary)', cursor: 'pointer' }}
+            />
+            <div>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Bỏ qua bài đặt câu phiên này</span>
+              <div className="text-muted" style={{ fontSize: '0.75rem' }}>
+                Mặc định cài đặt:{' '}
+                {settings.enableSentencePractice === false
+                  ? 'tắt'
+                  : `bật (tối đa ${settings.maxSentenceWords ?? 5} từ)`}
+                . Tick để chỉ làm flashcard.
+              </div>
+            </div>
+          </div>
+
           <button
+            type="button"
             onClick={handleStartStudy}
-            disabled={!practiceMode && dueCount === 0}
+            disabled={(!practiceMode && dueCount === 0) || (practiceMode && filteredPool.length === 0)}
             className="btn btn-primary"
             style={{
               padding: '0.9rem',
               fontSize: '1rem',
               fontWeight: 700,
-              letterSpacing: '0.5px',
               borderRadius: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.5rem',
-              background: (!practiceMode && dueCount === 0) ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
-              color: (!practiceMode && dueCount === 0) ? 'var(--text-muted)' : 'white',
-              cursor: (!practiceMode && dueCount === 0) ? 'not-allowed' : 'pointer',
-              border: 'none',
-              boxShadow: (!practiceMode && dueCount === 0) ? 'none' : '0 4px 15px rgba(139, 92, 246, 0.3)',
-              transition: 'all 0.2s ease'
             }}
           >
-            BẮT ĐẦU HỌC
+            Bắt đầu học
           </button>
         </div>
       </div>
@@ -649,260 +821,409 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', gap: '1rem', overflow: 'hidden' }}>
-      {/* Active Session Header */}
-      <div className="glass-panel" style={{ padding: '0.6rem 1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        width: '100%',
+        height: '100%',
+        gap: '0.75rem',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        className="glass-panel"
+        style={{
+          padding: '0.55rem 0.85rem',
+          borderRadius: '12px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexShrink: 0,
+          gap: '0.5rem',
+          flexWrap: 'wrap',
+        }}
+      >
         <button
+          type="button"
           onClick={handleExitSession}
           className="btn btn-outline"
-          style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', borderRadius: '8px' }}
+          style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', borderRadius: '8px' }}
         >
-          <span>← Quay lại Dashboard</span>
+          ← Dashboard
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{
-            fontSize: '0.75rem',
-            fontWeight: 600,
-            color: 'var(--text-muted)',
-            background: 'rgba(255,255,255,0.04)',
-            padding: '0.25rem 0.6rem',
-            borderRadius: '999px',
-            border: '1px solid var(--glass-border)'
-          }}>
-            {practiceMode ? 'Practice Mode' : 'SRS Mode'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+          {sessionPhase === 'flashcards' && undoStack && (
+            <button
+              type="button"
+              onClick={handleUndo}
+              className="btn btn-outline"
+              style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem', borderRadius: '8px' }}
+              title="Hoàn tác chấm điểm (Ctrl+Z)"
+            >
+              <Undo2 size={14} /> Hoàn tác
+            </button>
+          )}
+          <span
+            style={{
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              color: 'var(--text-muted)',
+              background: 'rgba(128,128,128,0.08)',
+              padding: '0.25rem 0.6rem',
+              borderRadius: '999px',
+              border: '1px solid var(--glass-border)',
+            }}
+          >
+            {practiceMode ? 'Luyện tự do' : 'SRS'}
+            {filterTag ? ` · #${filterTag}` : ''}
           </span>
         </div>
       </div>
 
       {sessionPhase === 'complete' ? (
-        <div className="glass-panel flex-center" style={{ flexDirection: 'column', textAlign: 'center', flex: 1, minHeight: 0 }}>
-          <div style={{ background: 'rgba(16,185,129,0.1)', color: 'var(--accent-success)', padding: '1.5rem', borderRadius: '50%', marginBottom: '1rem' }}>
+        <div
+          className="glass-panel flex-center"
+          style={{ flexDirection: 'column', textAlign: 'center', flex: 1, minHeight: 0 }}
+        >
+          <div
+            style={{
+              background: 'rgba(16,185,129,0.1)',
+              color: 'var(--accent-success)',
+              padding: '1.5rem',
+              borderRadius: '50%',
+              marginBottom: '1rem',
+            }}
+          >
             <Coffee size={48} />
           </div>
           <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Tuyệt vời!</h2>
           <p className="text-muted" style={{ fontSize: '0.9rem', maxWidth: '380px', marginBottom: '1.5rem' }}>
-            {practiceMode 
-              ? "Bạn đã hoàn thành phiên luyện tập tự do!" 
-              : "Bạn đã hoàn thành tất cả các từ cần ôn tập của hôm nay!"}
+            {practiceMode
+              ? 'Bạn đã hoàn thành phiên luyện tập!'
+              : 'Bạn đã xong các từ cần ôn hôm nay!'}
           </p>
-          <button onClick={handleExitSession} className="btn btn-primary" style={{ padding: '0.6rem 1.5rem', borderRadius: '8px' }}>
+          <button
+            type="button"
+            onClick={handleExitSession}
+            className="btn btn-primary"
+            style={{ padding: '0.6rem 1.5rem', borderRadius: '8px' }}
+          >
             Về Dashboard
           </button>
         </div>
       ) : sessionPhase === 'sentence' ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', flex: 1, minHeight: 0, overflowY: 'auto', padding: '1rem' }}>
-          <div style={{ background: 'var(--glass-bg)', padding: '0.3rem 1rem', borderRadius: '999px', border: '1px solid var(--glass-border)', fontSize: '0.85rem', flexShrink: 0 }}>
-            Bài tập đặt câu (Còn <strong className="text-gradient">{sentenceQueue.length}</strong> từ)
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '1rem',
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            padding: '0.5rem',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+            }}
+          >
+            <div
+              style={{
+                background: 'var(--glass-bg)',
+                padding: '0.3rem 1rem',
+                borderRadius: '999px',
+                border: '1px solid var(--glass-border)',
+                fontSize: '0.85rem',
+              }}
+            >
+              Đặt câu — còn <strong className="text-gradient">{sentenceQueue.length}</strong> từ
+            </div>
+            <button
+              type="button"
+              onClick={handleSkipAllSentences}
+              className="btn btn-outline"
+              style={{ padding: '0.3rem 0.75rem', fontSize: '0.8rem', borderRadius: '8px' }}
+            >
+              <SkipForward size={14} /> Bỏ qua phần này
+            </button>
           </div>
-          
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '600px', padding: '1.5rem', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '1rem', flexShrink: 0 }}>
+
+          <div
+            className="glass-panel"
+            style={{
+              width: '100%',
+              maxWidth: '600px',
+              padding: '1.5rem',
+              borderRadius: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1rem',
+            }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontSize: '1.2rem', textAlign: 'center', flex: 1, margin: 0 }}>
+              <h3 style={{ fontSize: '1.1rem', textAlign: 'center', flex: 1, margin: 0 }}>
                 Hãy đặt một câu tiếng Anh với từ:
               </h3>
               <button
+                type="button"
                 onClick={(e) => handleDeleteWord(currentSentenceWord, e)}
                 className="btn btn-outline"
-                style={{ padding: '0.4rem', borderRadius: '8px', color: 'var(--accent-danger)', borderColor: 'rgba(239,68,68,0.3)' }}
+                style={{
+                  padding: '0.4rem',
+                  borderRadius: '8px',
+                  color: 'var(--accent-danger)',
+                  borderColor: 'rgba(239,68,68,0.3)',
+                }}
                 title="Xóa từ này"
               >
                 <Trash2 size={16} />
               </button>
             </div>
             <div style={{ textAlign: 'center' }}>
-              <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0 }}>{currentSentenceWord?.word}</h1>
-              <p className="text-muted" style={{ fontSize: '1.1rem', marginTop: '0.25rem' }}>{currentSentenceWord?.phonetic}</p>
-              <p style={{ color: 'var(--accent-warning)', fontWeight: 600 }}>{currentSentenceWord?.viMeaning}</p>
-              <p className="text-muted" style={{ fontSize: '0.9rem' }}>{currentSentenceWord?.meaning}</p>
+              <h1 className="text-gradient" style={{ fontSize: '2.25rem', margin: 0 }}>
+                {currentSentenceWord?.word}
+              </h1>
+              <p className="text-muted" style={{ fontSize: '1rem', marginTop: '0.25rem' }}>
+                {currentSentenceWord?.phonetic}
+              </p>
+              <p style={{ color: 'var(--accent-warning)', fontWeight: 600 }}>
+                {currentSentenceWord?.viMeaning}
+              </p>
+              <p className="text-muted" style={{ fontSize: '0.9rem' }}>
+                {currentSentenceWord?.meaning}
+              </p>
             </div>
-            
+
             <textarea
               className="input-field"
               value={userSentence}
-              onChange={e => setUserSentence(e.target.value)}
-              placeholder="Nhập câu của bạn vào đây..."
+              onChange={(e) => setUserSentence(e.target.value)}
+              placeholder="Nhập câu của bạn..."
               rows={3}
               style={{ resize: 'vertical', fontSize: '1rem', padding: '1rem' }}
             />
-            
+
             {!aiFeedback && (
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button
-                  onClick={handleVerifySentence}
-                  disabled={!userSentence.trim() || isVerifying}
-                  className="btn btn-primary"
-                  style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
-                >
-                  {isVerifying ? <Loader2 size={18} className="spin" /> : <Sparkles size={18} />}
-                  {isVerifying ? 'AI Đang kiểm tra...' : 'Nhờ AI Kiểm Tra'}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleVerifySentence}
+                disabled={!userSentence.trim() || isVerifying}
+                className="btn btn-primary"
+                style={{
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                }}
+              >
+                {isVerifying ? <Loader2 size={18} className="spin" /> : <Sparkles size={18} />}
+                {isVerifying ? 'AI đang kiểm tra...' : 'Nhờ AI kiểm tra'}
+              </button>
             )}
-            
-            {aiFeedback && (() => {
-              const isError = aiFeedback.startsWith('Lỗi') || aiFeedback.startsWith('Không') || aiFeedback.includes('Vui lòng vào phần Cài đặt');
-              return (
-                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1.25rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', color: isError ? 'var(--accent-danger)' : 'var(--accent-primary)' }}>
-                    <Sparkles size={18} />
-                    <h4 style={{ margin: 0, fontSize: '1rem' }}>{isError ? 'Cảnh báo' : 'Nhận xét'}</h4>
-                  </div>
-                  <MarkdownText text={aiFeedback} />
-                  
-                  {isError ? (
-                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-                      <button
-                        onClick={() => setAiFeedback('')}
-                        className="btn btn-primary"
-                        style={{ flex: 1, padding: '0.75rem', borderRadius: '8px' }}
-                      >
-                        Thử lại
-                      </button>
-                      <button
-                        onClick={handleNextSentence}
-                        className="btn btn-outline"
-                        style={{ flex: 1, padding: '0.75rem', borderRadius: '8px' }}
-                      >
-                        Bỏ qua
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={handleNextSentence}
-                      className="btn btn-primary"
-                      style={{ width: '100%', marginTop: '1rem', padding: '0.75rem', borderRadius: '8px' }}
+
+            {aiFeedback &&
+              (() => {
+                const isError =
+                  aiFeedback.startsWith('Lỗi') ||
+                  aiFeedback.startsWith('Không') ||
+                  aiFeedback.includes('Vui lòng vào phần Cài đặt');
+                return (
+                  <div
+                    style={{
+                      background: 'rgba(128,128,128,0.06)',
+                      padding: '1.25rem',
+                      borderRadius: '12px',
+                      border: '1px solid var(--glass-border)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        marginBottom: '0.75rem',
+                        color: isError ? 'var(--accent-danger)' : 'var(--accent-primary)',
+                      }}
                     >
-                      Tiếp tục
-                    </button>
-                  )}
-                </div>
-              );
-            })()}
+                      <Sparkles size={18} />
+                      <h4 style={{ margin: 0, fontSize: '1rem' }}>{isError ? 'Cảnh báo' : 'Nhận xét'}</h4>
+                    </div>
+                    <MarkdownText text={aiFeedback} />
+                    {isError ? (
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => setAiFeedback('')}
+                          className="btn btn-primary"
+                          style={{ flex: 1, padding: '0.75rem', borderRadius: '8px' }}
+                        >
+                          Thử lại
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleNextSentence}
+                          className="btn btn-outline"
+                          style={{ flex: 1, padding: '0.75rem', borderRadius: '8px' }}
+                        >
+                          Bỏ qua
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleNextSentence}
+                        className="btn btn-primary"
+                        style={{ width: '100%', marginTop: '1rem', padding: '0.75rem', borderRadius: '8px' }}
+                      >
+                        Tiếp tục
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
           </div>
         </div>
       ) : currentWord ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-          <div style={{ background: 'var(--glass-bg)', padding: '0.3rem 1rem', borderRadius: '999px', border: '1px solid var(--glass-border)', fontSize: '0.85rem' }}>
-            Còn lại: <strong className="text-gradient">{queue.length}</strong> từ
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '0.65rem',
+            flex: 1,
+            minHeight: 0,
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{ width: '100%', maxWidth: 520, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: '0.8rem',
+                color: 'var(--text-muted)',
+              }}
+            >
+              <span>
+                Tiến độ: <strong className="text-gradient">{doneCount}</strong> / {sessionTotal}
+              </span>
+              <span>Còn {queue.length} từ</span>
+            </div>
+            <div className="session-progress-track">
+              <div className="session-progress-fill" style={{ width: `${progressPct}%` }} />
+            </div>
           </div>
 
           {isEditing ? (
-            <div className="glass-panel" style={{
-              width: '100%',
-              maxWidth: '520px',
-              margin: '0 auto',
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.75rem',
-              overflowY: 'auto',
-              padding: '1.25rem',
-              borderRadius: '16px',
-              boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-              border: '1px solid var(--glass-border)',
-              background: 'linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02))',
-              backdropFilter: 'blur(20px)'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem', marginBottom: '0.25rem' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Edit size={16} className="text-gradient" /> Chỉnh sửa thẻ từ
+            <div
+              className="glass-panel"
+              style={{
+                width: '100%',
+                maxWidth: '520px',
+                margin: '0 auto',
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem',
+                overflowY: 'auto',
+                padding: '1.25rem',
+                borderRadius: '16px',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  borderBottom: '1px solid var(--glass-border)',
+                  paddingBottom: '0.5rem',
+                }}
+              >
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Edit size={16} className="text-gradient" /> Chỉnh sửa thẻ
                 </h3>
                 <button
+                  type="button"
                   onClick={handleAutoLookup}
                   disabled={isAutoLoading || !editWord.trim()}
                   className="btn btn-outline"
-                  style={{
-                    padding: '0.25rem 0.60rem',
-                    fontSize: '0.75rem',
-                    borderRadius: '6px',
-                    background: 'rgba(59, 130, 246, 0.1)',
-                    borderColor: 'rgba(59, 130, 246, 0.2)',
-                    color: 'var(--accent-primary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.25rem'
-                  }}
-                  title="Tự động điền phiên âm, nghĩa tiếng Anh và dịch tiếng Việt"
+                  style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', borderRadius: '6px' }}
                 >
                   {isAutoLoading ? <Loader2 size={12} className="spin" /> : <Sparkles size={12} />}
-                  <span>{isAutoLoading ? 'Đang tra cứu...' : 'Tra cứu nhanh'}</span>
+                  {isAutoLoading ? 'Đang tra...' : 'Tra cứu'}
                 </button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1, overflowY: 'auto', paddingRight: '2px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>Từ tiếng Anh *</label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    value={editWord}
-                    onChange={e => setEditWord(e.target.value)}
-                    placeholder="Ví dụ: extraordinary"
-                    required
-                  />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>Phiên âm</label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    value={editPhonetic}
-                    onChange={e => setEditPhonetic(e.target.value)}
-                    placeholder="Ví dụ: /ɪkˈstrɔːdnri/"
-                  />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>Định nghĩa tiếng Anh</label>
-                  <textarea
-                    className="input-field"
-                    value={editMeaning}
-                    onChange={e => setEditMeaning(e.target.value)}
-                    placeholder="Ví dụ: Very unusual or remarkable"
-                    rows={2}
-                    style={{ resize: 'vertical' }}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>Nghĩa tiếng Việt</label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    value={editViMeaning}
-                    onChange={e => setEditViMeaning(e.target.value)}
-                    placeholder="Ví dụ: phi thường, lạ thường"
-                  />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>Câu ví dụ</label>
-                  <textarea
-                    className="input-field"
-                    value={editExample}
-                    onChange={e => setEditExample(e.target.value)}
-                    placeholder="Ví dụ: She is an extraordinary young woman."
-                    rows={2}
-                    style={{ resize: 'vertical' }}
-                  />
-                </div>
-
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1, overflowY: 'auto' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                  Từ tiếng Anh *
+                </label>
+                <input className="input-field" value={editWord} onChange={(e) => setEditWord(e.target.value)} />
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>Phiên âm</label>
+                <input
+                  className="input-field"
+                  value={editPhonetic}
+                  onChange={(e) => setEditPhonetic(e.target.value)}
+                />
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                  Định nghĩa EN
+                </label>
+                <textarea
+                  className="input-field"
+                  value={editMeaning}
+                  onChange={(e) => setEditMeaning(e.target.value)}
+                  rows={2}
+                />
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>Nghĩa VI</label>
+                <input
+                  className="input-field"
+                  value={editViMeaning}
+                  onChange={(e) => setEditViMeaning(e.target.value)}
+                />
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>Ví dụ</label>
+                <textarea
+                  className="input-field"
+                  value={editExample}
+                  onChange={(e) => setEditExample(e.target.value)}
+                  rows={2}
+                />
                 {editError && (
-                  <div style={{ color: 'var(--accent-danger)', padding: '0.4rem 0.75rem', background: 'rgba(239,68,68,0.1)', borderRadius: '8px', fontSize: '0.75rem' }}>
+                  <div
+                    style={{
+                      color: 'var(--accent-danger)',
+                      padding: '0.4rem 0.75rem',
+                      background: 'rgba(239,68,68,0.1)',
+                      borderRadius: '8px',
+                      fontSize: '0.75rem',
+                    }}
+                  >
                     {editError}
                   </div>
                 )}
               </div>
 
-              <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid var(--glass-border)', paddingTop: '0.75rem', flexShrink: 0 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '0.5rem',
+                  borderTop: '1px solid var(--glass-border)',
+                  paddingTop: '0.75rem',
+                }}
+              >
                 <button
                   type="button"
                   onClick={(e) => handleDeleteWord(currentWord, e)}
                   className="btn btn-outline"
-                  style={{ padding: '0.5rem', fontSize: '0.85rem', borderRadius: '8px', color: 'var(--accent-danger)', borderColor: 'rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  title="Xóa từ này"
+                  style={{ padding: '0.5rem', borderRadius: '8px', color: 'var(--accent-danger)' }}
                 >
                   <Trash2 size={16} />
                 </button>
@@ -910,7 +1231,7 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
                   type="button"
                   onClick={handleCancelEdit}
                   className="btn btn-outline"
-                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem', borderRadius: '8px' }}
+                  style={{ flex: 1, padding: '0.5rem', borderRadius: '8px' }}
                 >
                   Hủy
                 </button>
@@ -918,133 +1239,228 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
                   type="button"
                   onClick={handleSaveEdit}
                   className="btn btn-primary"
-                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem', borderRadius: '8px' }}
+                  style={{ flex: 1, padding: '0.5rem', borderRadius: '8px' }}
                 >
-                  Lưu thay đổi
+                  Lưu
                 </button>
               </div>
             </div>
           ) : (
             <div className="flashcard-container" onClick={!isFlipped ? handleFlip : undefined}>
               <div className={`flashcard ${isFlipped ? 'flipped' : ''}`}>
-                {/* Front side of the card */}
                 <div className="flashcard-front">
-                  <p className="text-muted" style={{ position: 'absolute', top: '1rem', textTransform: 'uppercase', letterSpacing: '2px', fontSize: '0.7rem' }}>Tap or Space to flip</p>
-                  
-                  {/* Edit & Delete Buttons (Front) */}
-                  <div style={{ position: 'absolute', top: '1rem', left: '1rem', display: 'flex', gap: '0.25rem', zIndex: 10 }}>
-                    <button 
-                      onClick={handleStartEdit} 
-                      className="btn btn-outline" 
+                  <p
+                    className="text-muted"
+                    style={{
+                      position: 'absolute',
+                      top: '1rem',
+                      textTransform: 'uppercase',
+                      letterSpacing: '1px',
+                      fontSize: '0.65rem',
+                    }}
+                  >
+                    Chạm hoặc Space để lật
+                  </p>
+
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '1rem',
+                      left: '1rem',
+                      display: 'flex',
+                      gap: '0.25rem',
+                      zIndex: 10,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={handleStartEdit}
+                      className="btn btn-outline"
                       style={{ padding: '0.4rem', borderRadius: '50%', border: 'none', background: 'transparent' }}
-                      title="Chỉnh sửa thẻ"
                     >
                       <Edit size={18} className="text-muted" />
                     </button>
-                    <button 
-                      onClick={(e) => handleDeleteWord(currentWord, e)} 
-                      className="btn btn-outline" 
-                      style={{ padding: '0.4rem', borderRadius: '50%', border: 'none', background: 'transparent', color: 'var(--accent-danger)' }}
-                      title="Xóa từ này"
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteWord(currentWord, e)}
+                      className="btn btn-outline"
+                      style={{
+                        padding: '0.4rem',
+                        borderRadius: '50%',
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--accent-danger)',
+                      }}
                     >
                       <Trash2 size={18} />
                     </button>
                   </div>
 
-                  {/* Active Mode Badge */}
-                  <div style={{
-                    position: 'absolute',
-                    top: '2.5rem',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    background: showReverse ? 'rgba(245, 158, 11, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-                    border: showReverse ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(59, 130, 246, 0.3)',
-                    color: showReverse ? 'var(--accent-warning)' : 'var(--accent-primary)',
-                    padding: '0.2rem 0.75rem',
-                    borderRadius: '999px',
-                    fontSize: '0.65rem',
-                    fontWeight: 700,
-                    letterSpacing: '1px',
-                    textTransform: 'uppercase',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {showReverse ? 'Đoán từ Tiếng Anh' : 'Đoán nghĩa Tiếng Việt'}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '2.5rem',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      background: showReverse ? 'rgba(245, 158, 11, 0.12)' : 'rgba(59, 130, 246, 0.12)',
+                      border: showReverse
+                        ? '1px solid rgba(245, 158, 11, 0.3)'
+                        : '1px solid rgba(59, 130, 246, 0.3)',
+                      color: showReverse ? 'var(--accent-warning)' : 'var(--accent-primary)',
+                      padding: '0.2rem 0.75rem',
+                      borderRadius: '999px',
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.5px',
+                      textTransform: 'uppercase',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {showReverse ? 'Đoán từ tiếng Anh' : 'Đoán nghĩa tiếng Việt'}
                   </div>
 
                   {!showReverse && (
-                    <button 
-                      onClick={(e) => speakWord(currentWord.word, e)} 
-                      className="btn btn-outline" 
-                      style={{ position: 'absolute', top: '1rem', right: '1rem', padding: '0.4rem', borderRadius: '50%', border: 'none' }}
-                      title="Listen"
+                    <button
+                      type="button"
+                      onClick={(e) => speakWord(currentWord.word, e)}
+                      className="btn btn-outline"
+                      style={{
+                        position: 'absolute',
+                        top: '1rem',
+                        right: '1rem',
+                        padding: '0.4rem',
+                        borderRadius: '50%',
+                        border: 'none',
+                      }}
+                      title="Nghe"
                     >
                       <Volume2 size={20} className="text-muted" />
                     </button>
                   )}
 
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', marginTop: '1.5rem', width: '100%' }}>
-                    <h1 className="word-large text-gradient" style={{ marginBottom: 0, fontSize: showReverse ? '2rem' : '3rem', wordBreak: 'break-word', lineHeight: '1.2' }}>
-                      {showReverse ? (currentWord.viMeaning || currentWord.meaning) : currentWord.word}
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      marginTop: '1.5rem',
+                      width: '100%',
+                    }}
+                  >
+                    <h1
+                      className="word-large text-gradient"
+                      style={{
+                        marginBottom: 0,
+                        fontSize: showReverse ? '2rem' : undefined,
+                        wordBreak: 'break-word',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {showReverse ? currentWord.viMeaning || currentWord.meaning : currentWord.word}
                     </h1>
                     {!showReverse && currentWord.phonetic && (
-                      <p className="text-muted" style={{ fontSize: '1.2rem', fontFamily: 'monospace' }}>{currentWord.phonetic}</p>
+                      <p className="text-muted" style={{ fontSize: '1.1rem', fontFamily: 'monospace' }}>
+                        {currentWord.phonetic}
+                      </p>
                     )}
                   </div>
                 </div>
-                
-                {/* Back side of the card */}
+
                 <div className="flashcard-back">
-                  {/* Edit & Delete Buttons (Back) */}
-                  <div style={{ position: 'absolute', top: '1rem', left: '1rem', display: 'flex', gap: '0.25rem', zIndex: 10 }}>
-                    <button 
-                      onClick={handleStartEdit} 
-                      className="btn btn-outline" 
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '1rem',
+                      left: '1rem',
+                      display: 'flex',
+                      gap: '0.25rem',
+                      zIndex: 10,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={handleStartEdit}
+                      className="btn btn-outline"
                       style={{ padding: '0.4rem', borderRadius: '50%', border: 'none', background: 'transparent' }}
-                      title="Chỉnh sửa thẻ"
                     >
                       <Edit size={18} className="text-muted" />
                     </button>
-                    <button 
-                      onClick={(e) => handleDeleteWord(currentWord, e)} 
-                      className="btn btn-outline" 
-                      style={{ padding: '0.4rem', borderRadius: '50%', border: 'none', background: 'transparent', color: 'var(--accent-danger)' }}
-                      title="Xóa từ này"
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteWord(currentWord, e)}
+                      className="btn btn-outline"
+                      style={{
+                        padding: '0.4rem',
+                        borderRadius: '50%',
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--accent-danger)',
+                      }}
                     >
                       <Trash2 size={18} />
                     </button>
                   </div>
 
-                  {/* Active Mode Badge on Back */}
-                  <div style={{
-                    position: 'absolute',
-                    top: '1rem',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    background: 'rgba(16, 185, 129, 0.15)',
-                    border: '1px solid rgba(16, 185, 129, 0.3)',
-                    color: 'var(--accent-success)',
-                    padding: '0.15rem 0.6rem',
-                    borderRadius: '999px',
-                    fontSize: '0.65rem',
-                    fontWeight: 700,
-                    letterSpacing: '1px',
-                    textTransform: 'uppercase'
-                  }}>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '1rem',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      background: 'rgba(16, 185, 129, 0.12)',
+                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                      color: 'var(--accent-success)',
+                      padding: '0.15rem 0.6rem',
+                      borderRadius: '999px',
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.5px',
+                      textTransform: 'uppercase',
+                    }}
+                  >
                     Đáp án
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', marginTop: '1.5rem' }}>
-                    <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: 0 }}>{currentWord.word}</h1>
-                    <button onClick={(e) => speakWord(currentWord.word, e)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }} title="Listen">
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      marginBottom: '0.25rem',
+                      marginTop: '1.5rem',
+                    }}
+                  >
+                    <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: 0 }}>{currentWord.word}</h1>
+                    <button
+                      type="button"
+                      onClick={(e) => speakWord(currentWord.word, e)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                    >
                       <Volume2 size={22} />
                     </button>
                   </div>
-                  {currentWord.phonetic && <p className="text-muted" style={{ fontSize: '1.1rem', fontFamily: 'monospace', marginBottom: '0.5rem' }}>{currentWord.phonetic}</p>}
-                  <div style={{ width: '40px', height: '3px', background: 'var(--accent-primary)', margin: '0.5rem 0', borderRadius: '2px' }}></div>
-                  
-                  {currentWord.viMeaning && <p style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--accent-warning)', marginBottom: '0.25rem' }}>{currentWord.viMeaning}</p>}
+                  {currentWord.phonetic && (
+                    <p className="text-muted" style={{ fontSize: '1rem', fontFamily: 'monospace', marginBottom: '0.5rem' }}>
+                      {currentWord.phonetic}
+                    </p>
+                  )}
+                  <div
+                    style={{
+                      width: 40,
+                      height: 3,
+                      background: 'var(--accent-primary)',
+                      margin: '0.5rem 0',
+                      borderRadius: 2,
+                    }}
+                  />
+                  {currentWord.viMeaning && (
+                    <p style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--accent-warning)', marginBottom: '0.25rem' }}>
+                      {currentWord.viMeaning}
+                    </p>
+                  )}
                   <p className="word-meaning">{currentWord.meaning}</p>
-                  {currentWord.example && <p className="word-example">"{currentWord.example}"</p>}
+                  {currentWord.example && <p className="word-example">&ldquo;{currentWord.example}&rdquo;</p>}
                 </div>
               </div>
             </div>
@@ -1052,17 +1468,27 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
 
           <AnimatePresence>
             {isFlipped && !isEditing && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                style={{ display: 'flex', gap: '1rem' }}
+                exit={{ opacity: 0, y: -8 }}
+                style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}
               >
-                <button onClick={() => handleGrade(0)} className="btn btn-outline" style={{ borderColor: 'var(--accent-danger)', color: 'var(--accent-danger)' }}>
-                  <Frown size={18} /> Forget (1)
+                <button
+                  type="button"
+                  onClick={() => handleGrade(0)}
+                  className="btn btn-outline"
+                  style={{ borderColor: 'var(--accent-danger)', color: 'var(--accent-danger)' }}
+                >
+                  <Frown size={18} /> Quên (1)
                 </button>
-                <button onClick={() => handleGrade(3)} className="btn btn-outline" style={{ borderColor: 'var(--accent-success)', color: 'var(--accent-success)' }}>
-                  <Sparkles size={18} /> Easy (2)
+                <button
+                  type="button"
+                  onClick={() => handleGrade(3)}
+                  className="btn btn-outline"
+                  style={{ borderColor: 'var(--accent-success)', color: 'var(--accent-success)' }}
+                >
+                  <Sparkles size={18} /> Dễ (2)
                 </button>
               </motion.div>
             )}

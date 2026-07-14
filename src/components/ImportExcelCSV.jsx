@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import * as XLSX from 'xlsx';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { getInitialSRSData } from '../utils/srs';
@@ -137,8 +136,10 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
     }
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
+        // Dynamic import — keep xlsx out of initial bundle
+        const XLSX = await import('xlsx');
         const data = new Uint8Array(event.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];

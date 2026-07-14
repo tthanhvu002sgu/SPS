@@ -1,103 +1,156 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { useVocab } from './hooks/useVocab';
 import StudySession from './components/StudySession';
-import Settings from './components/Settings';
-import WordList from './components/WordList';
-import { Sparkles, BrainCircuit, Settings as SettingsIcon, Library } from 'lucide-react';
+import { Sparkles, BrainCircuit, Settings as SettingsIcon, Library, Loader2 } from 'lucide-react';
+
+const WordList = lazy(() => import('./components/WordList'));
+const Settings = lazy(() => import('./components/Settings'));
+
+const TabFallback = () => (
+  <div className="tab-fallback">
+    <Loader2 size={28} className="spin text-gradient" />
+    <span className="text-muted" style={{ fontSize: '0.9rem' }}>Đang tải...</span>
+  </div>
+);
+
+const AppSkeleton = () => (
+  <div className="app-skeleton animate-fade-in">
+    <div className="skeleton-header">
+      <div className="skeleton-block" style={{ width: 140, height: 36, borderRadius: 12 }} />
+      <div className="skeleton-block" style={{ width: 200, height: 40, borderRadius: 999 }} />
+    </div>
+    <div className="skeleton-body">
+      <div className="skeleton-block" style={{ height: 100, borderRadius: 16 }} />
+      <div className="skeleton-block" style={{ height: 220, borderRadius: 16 }} />
+      <div className="skeleton-block" style={{ height: 48, borderRadius: 12 }} />
+    </div>
+  </div>
+);
 
 function App() {
-  const { 
-    words, 
-    settings, 
+  const {
+    words,
+    settings,
     topics,
-    addWord, 
+    isLoading,
+    addWord,
     addWords,
-    updateWord, 
+    updateWord,
     updateSettings,
-    addTopic, 
-    deleteWord, 
+    addTopic,
+    deleteWord,
     clearAllWords,
     importData,
+    importSnapshot,
+    getFullSnapshotForBackup,
     reviewHistory,
     recordReview,
-    streak
+    undoRecordReview,
+    streak,
   } = useVocab();
+
   const [activeTab, setActiveTab] = useState('study');
 
   const navItems = [
-    { id: 'study', label: 'Study', icon: <BrainCircuit size={20} /> },
-    { id: 'library', label: 'Library', icon: <Library size={20} /> },
-    { id: 'settings', label: 'Settings', icon: <SettingsIcon size={20} /> }
+    { id: 'study', label: 'Học', icon: <BrainCircuit size={20} /> },
+    { id: 'library', label: 'Thư viện', icon: <Library size={20} /> },
+    { id: 'settings', label: 'Cài đặt', icon: <SettingsIcon size={20} /> },
   ];
+
+  if (isLoading) {
+    return <AppSkeleton />;
+  }
 
   return (
     <>
       <header className="app-header">
         <div className="app-title">
-          <div style={{ 
-            background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
-            padding: '0.5rem',
-            borderRadius: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 4px 15px rgba(59, 130, 246, 0.4)'
-          }}>
-            <Sparkles size={28} color="white" />
+          <div className="app-logo-icon">
+            <Sparkles size={22} color="white" />
           </div>
-          SpacedRep
+          <span className="app-title-text">SpacedRep</span>
         </div>
-        
-        <nav style={{ display: 'flex', gap: '0.5rem', background: 'var(--glass-bg)', padding: '0.5rem', borderRadius: '999px', border: '1px solid var(--glass-border)' }}>
-          {navItems.map(item => (
+
+        <nav className="app-nav app-nav-desktop" aria-label="Điều hướng chính">
+          {navItems.map((item) => (
             <button
               key={item.id}
+              type="button"
               onClick={() => setActiveTab(item.id)}
-              style={{
-                background: activeTab === item.id ? 'rgba(255,255,255,0.1)' : 'transparent',
-                border: 'none',
-                color: activeTab === item.id ? 'var(--text-main)' : 'var(--text-muted)',
-                padding: '0.5rem 1rem',
-                borderRadius: '999px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                fontWeight: 500,
-                transition: 'all 0.2s ease'
-              }}
+              className={`nav-pill ${activeTab === item.id ? 'nav-pill-active' : ''}`}
             >
               {item.icon}
-              <span style={{ display: window.innerWidth < 768 && activeTab !== item.id ? 'none' : 'inline' }}>
-                {item.label}
-              </span>
+              <span className="nav-label">{item.label}</span>
             </button>
           ))}
         </nav>
       </header>
 
-      <main className="main-container" style={{ position: 'relative', width: '100%', height: '100%' }}>
-        <div style={{ display: activeTab === 'library' ? 'block' : 'none', height: '100%' }}>
-          <WordList words={words} settings={settings} topics={topics} addTopic={addTopic} updateWord={updateWord} deleteWord={deleteWord} addWord={addWord} addWords={addWords} />
+      <main className="main-container">
+        <div className={`tab-panel ${activeTab === 'study' ? 'tab-panel-active' : ''}`}>
+          {activeTab === 'study' && (
+            <StudySession
+              words={words}
+              settings={settings}
+              topics={topics}
+              onUpdateWord={updateWord}
+              onDeleteWord={deleteWord}
+              recordReview={recordReview}
+              undoRecordReview={undoRecordReview}
+              streak={streak}
+              reviewHistory={reviewHistory}
+              isActive={activeTab === 'study'}
+            />
+          )}
         </div>
-        
-        <div style={{ display: activeTab === 'study' ? 'block' : 'none', height: '100%' }}>
-          <StudySession 
-            words={words} 
-            settings={settings} 
-            onUpdateWord={updateWord} 
-            onDeleteWord={deleteWord}
-            recordReview={recordReview}
-            streak={streak}
-            reviewHistory={reviewHistory}
-            isActive={activeTab === 'study'}
-          />
+
+        <div className={`tab-panel ${activeTab === 'library' ? 'tab-panel-active' : ''}`}>
+          {activeTab === 'library' && (
+            <Suspense fallback={<TabFallback />}>
+              <WordList
+                words={words}
+                settings={settings}
+                topics={topics}
+                addTopic={addTopic}
+                updateWord={updateWord}
+                deleteWord={deleteWord}
+                addWord={addWord}
+                addWords={addWords}
+              />
+            </Suspense>
+          )}
         </div>
-        
-        <div style={{ display: activeTab === 'settings' ? 'block' : 'none', height: '100%' }}>
-          <Settings words={words} settings={settings} updateSettings={updateSettings} importData={importData} clearAllWords={clearAllWords} />
+
+        <div className={`tab-panel ${activeTab === 'settings' ? 'tab-panel-active' : ''}`}>
+          {activeTab === 'settings' && (
+            <Suspense fallback={<TabFallback />}>
+              <Settings
+                words={words}
+                settings={settings}
+                updateSettings={updateSettings}
+                importData={importData}
+                importSnapshot={importSnapshot}
+                getFullSnapshotForBackup={getFullSnapshotForBackup}
+                clearAllWords={clearAllWords}
+              />
+            </Suspense>
+          )}
         </div>
       </main>
+
+      <nav className="app-nav-mobile" aria-label="Điều hướng di động">
+        {navItems.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setActiveTab(item.id)}
+            className={`mobile-nav-item ${activeTab === item.id ? 'mobile-nav-active' : ''}`}
+          >
+            {item.icon}
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </nav>
     </>
   );
 }

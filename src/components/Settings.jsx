@@ -1,11 +1,24 @@
 import React, { useRef } from 'react';
-import { Settings as SettingsIcon, Save, Download, Upload, RotateCcw, Trash2 } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Download, Upload, RotateCcw, Trash2, Palette, BookOpen } from 'lucide-react';
 
-const Settings = ({ words, settings, updateSettings, importData, clearAllWords }) => {
+const Settings = ({
+  words,
+  settings,
+  updateSettings,
+  importData,
+  importSnapshot,
+  getFullSnapshotForBackup,
+  clearAllWords,
+}) => {
   const [localSettings, setLocalSettings] = React.useState(settings);
   const [saved, setSaved] = React.useState(false);
   const [dataMessage, setDataMessage] = React.useState('');
+  const [importMode, setImportMode] = React.useState('merge');
   const fileInputRef = useRef(null);
+
+  React.useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
 
   const handleDeleteAll = () => {
     if (words.length === 0) {
@@ -13,13 +26,12 @@ const Settings = ({ words, settings, updateSettings, importData, clearAllWords }
       return;
     }
     const confirmDelete = window.confirm(
-      `CẢNH BÁO: Bạn có chắc chắn muốn xóa toàn bộ từ vựng hiện tại?\n\n` +
-      `Hành động này sẽ xóa tất cả ${words.length} từ trong danh sách của bạn.\n` +
-      `Lưu ý: Bạn vẫn có thể khôi phục lại từ Bản sao lưu tự động (nếu có) hoặc tải file JSON sao lưu của bạn lên.`
+      `CẢNH BÁO: Xóa toàn bộ ${words.length} từ vựng?\n\n` +
+        'Bạn vẫn có thể khôi phục từ bản sao lưu tự động hoặc file JSON đã export.'
     );
     if (confirmDelete) {
       clearAllWords();
-      setDataMessage('Đã xóa toàn bộ từ vựng thành công!');
+      setDataMessage('Đã xóa toàn bộ từ vựng.');
       setTimeout(() => setDataMessage(''), 3000);
     }
   };
@@ -29,8 +41,7 @@ const Settings = ({ words, settings, updateSettings, importData, clearAllWords }
   React.useEffect(() => {
     const fetchVoices = () => {
       const allVoices = window.speechSynthesis.getVoices();
-      // Filter English voices
-      const enVoices = allVoices.filter(v => v.lang.startsWith('en'));
+      const enVoices = allVoices.filter((v) => v.lang.startsWith('en'));
       setVoices(enVoices.length > 0 ? enVoices : allVoices);
     };
 
@@ -41,11 +52,11 @@ const Settings = ({ words, settings, updateSettings, importData, clearAllWords }
   }, []);
 
   const handleChange = (e) => {
-    const { name, value, type } = e.target;
-    setLocalSettings(prev => ({
-      ...prev,
-      [name]: type === 'number' ? Number(value) : value
-    }));
+    const { name, value, type, checked } = e.target;
+    let nextVal = value;
+    if (type === 'number') nextVal = Number(value);
+    if (type === 'checkbox') nextVal = checked;
+    setLocalSettings((prev) => ({ ...prev, [name]: nextVal }));
     setSaved(false);
   };
 
@@ -56,14 +67,22 @@ const Settings = ({ words, settings, updateSettings, importData, clearAllWords }
   };
 
   const handleExport = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(words));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", `spacedrep_backup_${new Date().toISOString().split('T')[0]}.json`);
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-    setDataMessage('Data exported successfully!');
+    const snapshot = getFullSnapshotForBackup
+      ? getFullSnapshotForBackup()
+      : words;
+    const dataStr =
+      'data:text/json;charset=utf-8,' +
+      encodeURIComponent(JSON.stringify(snapshot, null, 2));
+    const node = document.createElement('a');
+    node.setAttribute('href', dataStr);
+    node.setAttribute(
+      'download',
+      `spacedrep_backup_${new Date().toISOString().split('T')[0]}.json`
+    );
+    document.body.appendChild(node);
+    node.click();
+    node.remove();
+    setDataMessage('Đã xuất bản sao lưu đầy đủ (từ + lịch sử + cài đặt).');
     setTimeout(() => setDataMessage(''), 3000);
   };
 
@@ -75,133 +94,390 @@ const Settings = ({ words, settings, updateSettings, importData, clearAllWords }
     reader.onload = (event) => {
       try {
         const importedData = JSON.parse(event.target.result);
-        if (Array.isArray(importedData)) {
-          if (window.confirm(`Are you sure you want to import ${importedData.length} words? This will replace your current data.`)) {
-            importData(importedData);
-            setDataMessage('Data imported successfully!');
-            setTimeout(() => setDataMessage(''), 3000);
-          }
-        } else {
-          alert('Invalid backup file format.');
+        const label =
+          importMode === 'replace'
+            ? 'GHI ĐÈ toàn bộ dữ liệu hiện tại'
+            : 'GỘP (merge) vào dữ liệu hiện tại — giữ SRS của từ đã có';
+        const count = Array.isArray(importedData)
+          ? importedData.length
+          : importedData?.words?.length || 0;
+
+        if (
+          !window.confirm(
+            `Import ${count} từ — chế độ: ${label}.\n\nTiếp tục?`
+          )
+        ) {
+          return;
         }
-      } catch (err) {
-        alert('Error parsing backup file.');
+
+        if (importSnapshot) {
+          const result = importSnapshot(importedData, importMode);
+          setDataMessage(
+            importMode === 'replace'
+              ? `Đã thay thế bằng ${result.total} từ.`
+              : `Đã gộp: +${result.added} mới, cập nhật ${result.updated}.`
+          );
+        } else if (Array.isArray(importedData)) {
+          importData(importedData);
+          setDataMessage('Đã import thành công.');
+        } else {
+          alert('Định dạng file không hợp lệ.');
+          return;
+        }
+        setTimeout(() => setDataMessage(''), 4000);
+      } catch {
+        alert('Không đọc được file backup (JSON lỗi).');
       }
     };
     reader.readAsText(file);
-    e.target.value = null; // reset input
+    e.target.value = null;
   };
 
   const handleRestoreAutoBackup = () => {
-    const backupStr = localStorage.getItem('spacedrep_vocab_backup');
-    if (backupStr) {
-      try {
-        const backupData = JSON.parse(backupStr);
-        if (Array.isArray(backupData) && window.confirm(`Restore ${backupData.length} words from auto-backup? This will replace your current data.`)) {
+    const fullStr = localStorage.getItem('spacedrep_full_backup');
+    const backupStr = fullStr || localStorage.getItem('spacedrep_vocab_backup');
+    if (!backupStr) {
+      alert('Không tìm thấy bản sao lưu tự động.');
+      return;
+    }
+    try {
+      const backupData = JSON.parse(backupStr);
+      const count = Array.isArray(backupData)
+        ? backupData.length
+        : backupData?.words?.length || 0;
+      if (
+        window.confirm(
+          `Khôi phục ${count} từ từ bản sao lưu tự động? Sẽ ghi đè dữ liệu hiện tại.`
+        )
+      ) {
+        if (importSnapshot) {
+          importSnapshot(backupData, 'replace');
+        } else if (Array.isArray(backupData)) {
           importData(backupData);
-          setDataMessage('Restored from auto-backup successfully!');
-          setTimeout(() => setDataMessage(''), 3000);
         }
-      } catch (e) {
-        alert('Auto-backup data is corrupted.');
+        setDataMessage('Đã khôi phục từ bản sao lưu tự động.');
+        setTimeout(() => setDataMessage(''), 3000);
       }
-    } else {
-      alert('No auto-backup found.');
+    } catch {
+      alert('Bản sao lưu bị hỏng.');
     }
   };
 
   return (
-    <div style={{ height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', paddingBottom: '2rem' }}>
+    <div
+      style={{
+        height: '100%',
+        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '1rem',
+        paddingBottom: '2rem',
+      }}
+    >
       <div className="glass-panel" style={{ width: '100%', maxWidth: '540px' }}>
-        <h2 style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
-          <SettingsIcon size={20} className="text-gradient" /> Settings
+        <h2
+          style={{
+            marginBottom: '1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            fontSize: '1.1rem',
+          }}
+        >
+          <SettingsIcon size={20} className="text-gradient" /> Cài đặt
         </h2>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
-            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.9rem' }}>Daily Review Limit</label>
-            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>Max words to review per day.</p>
-            <input type="number" name="dailyLimit" className="input-field" value={localSettings.dailyLimit} onChange={handleChange} min="1" max="1000" />
+            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.9rem' }}>
+              Giới hạn ôn mỗi ngày
+            </label>
+            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+              Số từ tối đa ôn theo SRS trong một ngày.
+            </p>
+            <input
+              type="number"
+              name="dailyLimit"
+              className="input-field"
+              value={localSettings.dailyLimit}
+              onChange={handleChange}
+              min="1"
+              max="1000"
+            />
           </div>
 
           <div>
-            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.9rem' }}>Interval Multiplier</label>
-            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>Higher = faster spacing (Default: 1).</p>
-            <input type="number" name="intervalMultiplier" className="input-field" value={localSettings.intervalMultiplier} onChange={handleChange} min="0.1" max="5" step="0.1" />
+            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.9rem' }}>
+              Hệ số khoảng cách
+            </label>
+            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+              Cao hơn = giãn cách ôn nhanh hơn (mặc định: 1).
+            </p>
+            <input
+              type="number"
+              name="intervalMultiplier"
+              className="input-field"
+              value={localSettings.intervalMultiplier}
+              onChange={handleChange}
+              min="0.1"
+              max="5"
+              step="0.1"
+            />
           </div>
 
           <div>
-            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.9rem' }}>Pronunciation Voice</label>
-            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>Select the voice used for pronunciation.</p>
-            <select name="voiceURI" className="input-field" value={localSettings.voiceURI || ''} onChange={handleChange}>
-              <option value="">System Default</option>
-              {voices.map(v => (
-                <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>
+            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.9rem' }}>
+              Giọng phát âm
+            </label>
+            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+              Giọng đọc từ khi bấm loa / phím Ctrl hoặc Enter.
+            </p>
+            <select
+              name="voiceURI"
+              className="input-field"
+              value={localSettings.voiceURI || ''}
+              onChange={handleChange}
+            >
+              <option value="">Mặc định hệ thống</option>
+              {voices.map((v) => (
+                <option key={v.voiceURI} value={v.voiceURI}>
+                  {v.name} ({v.lang})
+                </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.9rem' }}>Gemini API Key</label>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                marginBottom: '0.35rem',
+                fontWeight: 600,
+                fontSize: '0.9rem',
+              }}
+            >
+              <Palette size={16} /> Giao diện
+            </label>
             <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>
-              Dùng để chấm điểm Bài tập đặt câu. Lấy API key miễn phí tại <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-primary)' }}>Google AI Studio</a>.
+              Chọn theme sáng (Sepia) hoặc tối (Dark).
             </p>
-            <input type="password" name="geminiApiKey" className="input-field" value={localSettings.geminiApiKey || ''} onChange={handleChange} placeholder="Nhập API Key bắt đầu bằng AIzaSy..." />
+            <select
+              name="theme"
+              className="input-field"
+              value={localSettings.theme || 'sepia'}
+              onChange={handleChange}
+            >
+              <option value="sepia">Sepia (sáng, dễ đọc)</option>
+              <option value="dark">Dark (tối)</option>
+            </select>
           </div>
 
           <div>
-            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.9rem' }}>Gemini Model</label>
-            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>Chọn mô hình AI dùng để chấm câu.</p>
-            <select name="geminiModel" className="input-field" value={localSettings.geminiModel || 'gemini-2.5-flash-lite'} onChange={handleChange}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                marginBottom: '0.35rem',
+                fontWeight: 600,
+                fontSize: '0.9rem',
+              }}
+            >
+              <BookOpen size={16} /> Bài tập đặt câu sau flashcard
+            </label>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontSize: '0.85rem',
+                marginBottom: '0.5rem',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                name="enableSentencePractice"
+                checked={localSettings.enableSentencePractice !== false}
+                onChange={handleChange}
+                style={{ width: 16, height: 16, accentColor: 'var(--accent-primary)' }}
+              />
+              Bật bài đặt câu sau khi ôn xong (có thể bỏ qua trong phiên)
+            </label>
+            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+              Số từ tối đa làm bài đặt câu mỗi phiên (0 = tất cả từ đã nhớ).
+            </p>
+            <input
+              type="number"
+              name="maxSentenceWords"
+              className="input-field"
+              value={localSettings.maxSentenceWords ?? 5}
+              onChange={handleChange}
+              min="0"
+              max="100"
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.9rem' }}>
+              Gemini API Key
+            </label>
+            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+              Dùng chấm bài đặt câu & auto-tag. Lấy key miễn phí tại{' '}
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: 'var(--accent-primary)' }}
+              >
+                Google AI Studio
+              </a>
+              . Key chỉ lưu trên máy bạn.
+            </p>
+            <input
+              type="password"
+              name="geminiApiKey"
+              className="input-field"
+              value={localSettings.geminiApiKey || ''}
+              onChange={handleChange}
+              placeholder="AIzaSy..."
+              autoComplete="off"
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.9rem' }}>
+              Mô hình Gemini
+            </label>
+            <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+              Model dùng cho chấm câu / gắn tag.
+            </p>
+            <select
+              name="geminiModel"
+              className="input-field"
+              value={localSettings.geminiModel || 'gemini-2.5-flash-lite'}
+              onChange={handleChange}
+            >
               <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
               <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite</option>
               <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview)</option>
               <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-              <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Mặc định)</option>
+              <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (mặc định)</option>
             </select>
           </div>
 
           <button onClick={handleSave} className="btn btn-primary" style={{ marginTop: '0.5rem' }}>
-            <Save size={16} /> Save Settings
+            <Save size={16} /> Lưu cài đặt
           </button>
 
           {saved && (
-            <div style={{ color: 'var(--accent-success)', padding: '0.5rem', background: 'rgba(16,185,129,0.1)', borderRadius: '8px', textAlign: 'center', fontSize: '0.85rem' }}>
-              Settings saved!
+            <div
+              style={{
+                color: 'var(--accent-success)',
+                padding: '0.5rem',
+                background: 'rgba(16,185,129,0.1)',
+                borderRadius: '8px',
+                textAlign: 'center',
+                fontSize: '0.85rem',
+              }}
+            >
+              Đã lưu cài đặt!
             </div>
           )}
         </div>
       </div>
 
       <div className="glass-panel" style={{ width: '100%', maxWidth: '540px' }}>
-        <h2 style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
-          <Save size={20} className="text-gradient" /> Data Management
+        <h2
+          style={{
+            marginBottom: '1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            fontSize: '1.1rem',
+          }}
+        >
+          <Save size={20} className="text-gradient" /> Quản lý dữ liệu
         </h2>
 
         <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
-          The app automatically saves a daily backup of your data. You can also manually export or import your data.
+          App tự backup mỗi ngày. Export đầy đủ gồm từ vựng, lịch sử ôn, chủ đề và cài đặt.
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           <button onClick={handleExport} className="btn btn-outline" style={{ justifyContent: 'center' }}>
-            <Download size={16} /> Export Data (Backup)
+            <Download size={16} /> Xuất bản sao lưu (JSON đầy đủ)
           </button>
 
-          <button onClick={() => fileInputRef.current.click()} className="btn btn-outline" style={{ justifyContent: 'center' }}>
-            <Upload size={16} /> Import Data
-          </button>
-          <input type="file" ref={fileInputRef} onChange={handleImport} accept=".json" style={{ display: 'none' }} />
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.85rem' }}>
+              Chế độ import
+            </label>
+            <select
+              className="input-field"
+              value={importMode}
+              onChange={(e) => setImportMode(e.target.value)}
+              style={{ marginBottom: '0.5rem' }}
+            >
+              <option value="merge">Gộp (merge) — giữ SRS từ đã có</option>
+              <option value="replace">Ghi đè toàn bộ</option>
+            </select>
+            <button
+              onClick={() => fileInputRef.current.click()}
+              className="btn btn-outline"
+              style={{ justifyContent: 'center', width: '100%' }}
+            >
+              <Upload size={16} /> Import dữ liệu
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleImport}
+              accept=".json"
+              style={{ display: 'none' }}
+            />
+          </div>
 
-          <button onClick={handleRestoreAutoBackup} className="btn btn-outline" style={{ justifyContent: 'center', color: 'var(--accent-warning)', borderColor: 'rgba(245,158,11,0.3)' }}>
-            <RotateCcw size={16} /> Restore from Auto-Backup
+          <button
+            onClick={handleRestoreAutoBackup}
+            className="btn btn-outline"
+            style={{
+              justifyContent: 'center',
+              color: 'var(--accent-warning)',
+              borderColor: 'rgba(245,158,11,0.3)',
+            }}
+          >
+            <RotateCcw size={16} /> Khôi phục bản tự động
           </button>
 
-          <button onClick={handleDeleteAll} className="btn btn-outline" style={{ justifyContent: 'center', color: 'var(--accent-danger)', borderColor: 'rgba(239, 68, 68, 0.3)', marginTop: '0.5rem' }}>
+          <button
+            onClick={handleDeleteAll}
+            className="btn btn-outline"
+            style={{
+              justifyContent: 'center',
+              color: 'var(--accent-danger)',
+              borderColor: 'rgba(239, 68, 68, 0.3)',
+              marginTop: '0.5rem',
+            }}
+          >
             <Trash2 size={16} /> Xóa toàn bộ từ vựng
           </button>
 
           {dataMessage && (
-            <div style={{ color: 'var(--accent-success)', padding: '0.5rem', background: 'rgba(16,185,129,0.1)', borderRadius: '8px', textAlign: 'center', fontSize: '0.85rem', marginTop: '0.5rem' }}>
+            <div
+              style={{
+                color: 'var(--accent-success)',
+                padding: '0.5rem',
+                background: 'rgba(16,185,129,0.1)',
+                borderRadius: '8px',
+                textAlign: 'center',
+                fontSize: '0.85rem',
+                marginTop: '0.5rem',
+              }}
+            >
               {dataMessage}
             </div>
           )}
