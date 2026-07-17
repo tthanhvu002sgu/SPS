@@ -1,0 +1,19 @@
+{
+  "name": "SpacedRep — Học từ vựng",
+  "short_name": "SpacedRep",
+  "description": "Học từ vựng tiếng Anh với lặp lại ngắt quãng (SRS)",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#EFE9D8",
+  "theme_color": "#C0392B",
+  "lang": "vi",
+  "icons": [
+    {
+      "src": "logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
