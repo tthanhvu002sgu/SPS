@@ -5,6 +5,7 @@ const STORAGE_KEY = 'spacedrep_vocab_data';
 const SETTINGS_KEY = 'spacedrep_settings';
 const HISTORY_KEY = 'spacedrep_review_history';
 const TOPICS_KEY = 'spacedrep_topics';
+const FOLDERS_KEY = 'spacedrep_folders';
 const BACKUP_KEY = 'spacedrep_vocab_backup';
 const BACKUP_DATE_KEY = 'spacedrep_last_backup_date';
 const FULL_BACKUP_KEY = 'spacedrep_full_backup';
@@ -140,6 +141,7 @@ export const useVocab = () => {
   const [words, setWords] = useState([]);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [topics, setTopics] = useState([]);
+  const [folders, setFolders] = useState([]);
   const [reviewHistory, setReviewHistory] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const saveTimerRef = useRef(null);
@@ -153,11 +155,16 @@ export const useVocab = () => {
       ...safeParse(localStorage.getItem(SETTINGS_KEY), {}),
     };
     const storedTopics = safeParse(localStorage.getItem(TOPICS_KEY), null);
+    const storedFolders = safeParse(localStorage.getItem(FOLDERS_KEY), [{ id: 'default', name: 'Default', isDefault: true, wordIds: [], tags: [] }]);
     const storedHistory = safeParse(localStorage.getItem(HISTORY_KEY), {});
 
     const topicsList = storedTopics?.length ? storedTopics : DEFAULT_TOPICS;
     if (!storedTopics?.length) {
       localStorage.setItem(TOPICS_KEY, JSON.stringify(DEFAULT_TOPICS));
+    }
+    
+    if (!localStorage.getItem(FOLDERS_KEY)) {
+      localStorage.setItem(FOLDERS_KEY, JSON.stringify(storedFolders));
     }
 
     let initialHistory = storedHistory;
@@ -183,6 +190,7 @@ export const useVocab = () => {
     const { words: dayResetWords, changed } = resetReviewedIfNewDay(storedWords);
 
     setTopics(topicsList);
+    setFolders(storedFolders);
     setSettings(storedSettings);
     setReviewHistory(initialHistory);
     setWords(dayResetWords);
@@ -209,6 +217,7 @@ export const useVocab = () => {
           words: dayResetWords,
           settings: storedSettings,
           topics: topicsList,
+          folders: storedFolders,
           reviewHistory: initialHistory,
         })
       );
@@ -238,6 +247,9 @@ export const useVocab = () => {
         if (topics.length > 0) {
           localStorage.setItem(TOPICS_KEY, JSON.stringify(topics));
         }
+        if (folders.length > 0) {
+          localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders));
+        }
       } catch (e) {
         console.error('localStorage save failed', e);
       }
@@ -246,7 +258,7 @@ export const useVocab = () => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [words, settings, topics, isLoading]);
+  }, [words, settings, topics, folders, isLoading]);
 
   // Midnight-ish: re-check isReviewedToday once when tab becomes visible next day
   useEffect(() => {
@@ -265,6 +277,18 @@ export const useVocab = () => {
     if (newTopic) {
       setTopics((prev) => (prev.includes(newTopic) ? prev : [...prev, newTopic]));
     }
+  }, []);
+
+  const addFolder = useCallback((newFolder) => {
+    setFolders(prev => [...prev, newFolder]);
+  }, []);
+
+  const updateFolder = useCallback((updatedFolder) => {
+    setFolders(prev => prev.map(f => f.id === updatedFolder.id ? updatedFolder : f));
+  }, []);
+
+  const deleteFolder = useCallback((id) => {
+    setFolders(prev => prev.filter(f => f.id !== id));
   }, []);
 
   const addWord = useCallback((newWord) => {
@@ -310,6 +334,7 @@ export const useVocab = () => {
     let incomingWords = [];
     let incomingSettings = null;
     let incomingTopics = null;
+    let incomingFolders = null;
     let incomingHistory = null;
 
     if (Array.isArray(payload)) {
@@ -318,6 +343,7 @@ export const useVocab = () => {
       incomingWords = Array.isArray(payload.words) ? payload.words : [];
       if (payload.settings) incomingSettings = payload.settings;
       if (Array.isArray(payload.topics)) incomingTopics = payload.topics;
+      if (Array.isArray(payload.folders)) incomingFolders = payload.folders;
       if (payload.reviewHistory && typeof payload.reviewHistory === 'object') {
         incomingHistory = payload.reviewHistory;
       }
@@ -331,6 +357,10 @@ export const useVocab = () => {
         setSettings((prev) => ({ ...DEFAULT_SETTINGS, ...prev, ...incomingSettings }));
       }
       if (incomingTopics) setTopics(incomingTopics);
+      if (incomingFolders) {
+        setFolders(incomingFolders);
+        localStorage.setItem(FOLDERS_KEY, JSON.stringify(incomingFolders));
+      }
       if (incomingHistory) {
         setReviewHistory(incomingHistory);
         localStorage.setItem(HISTORY_KEY, JSON.stringify(incomingHistory));
@@ -374,6 +404,16 @@ export const useVocab = () => {
       });
     }
 
+    if (incomingFolders) {
+      setFolders((prev) => {
+        const map = new Map(prev.map(f => [f.id, f]));
+        incomingFolders.forEach(f => {
+          if (!map.has(f.id)) map.set(f.id, f);
+        });
+        return Array.from(map.values());
+      });
+    }
+
     if (incomingHistory) {
       setReviewHistory((prev) => {
         const merged = { ...prev };
@@ -408,9 +448,10 @@ export const useVocab = () => {
       words,
       settings: { ...settings, geminiApiKey: settings.geminiApiKey ? '***' : '' },
       topics,
+      folders,
       reviewHistory,
     };
-  }, [words, settings, topics, reviewHistory]);
+  }, [words, settings, topics, folders, reviewHistory]);
 
   /** Export with real API key for personal restore (user chooses) */
   const getFullSnapshotForBackup = useCallback(() => {
@@ -421,9 +462,10 @@ export const useVocab = () => {
       words,
       settings,
       topics,
+      folders,
       reviewHistory,
     };
-  }, [words, settings, topics, reviewHistory]);
+  }, [words, settings, topics, folders, reviewHistory]);
 
   const recordReview = useCallback((wordId, grade) => {
     const todayStr = formatDate(new Date());
@@ -470,6 +512,7 @@ export const useVocab = () => {
     words,
     settings,
     topics,
+    folders,
     isLoading,
     addWord,
     addWords,
@@ -478,6 +521,9 @@ export const useVocab = () => {
     clearAllWords,
     updateSettings,
     addTopic,
+    addFolder,
+    updateFolder,
+    deleteFolder,
     importData,
     importSnapshot,
     getFullSnapshot,

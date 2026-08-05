@@ -32,12 +32,16 @@ function App() {
     words,
     settings,
     topics,
+    folders,
     isLoading,
     addWord,
     addWords,
     updateWord,
     updateSettings,
     addTopic,
+    addFolder,
+    updateFolder,
+    deleteFolder,
     deleteWord,
     clearAllWords,
     importData,
@@ -111,7 +115,11 @@ function App() {
                 words={words}
                 settings={settings}
                 topics={topics}
+                folders={folders}
                 addTopic={addTopic}
+                addFolder={addFolder}
+                updateFolder={updateFolder}
+                deleteFolder={deleteFolder}
                 updateWord={updateWord}
                 deleteWord={deleteWord}
                 addWord={addWord}

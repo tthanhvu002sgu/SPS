@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
-import { Edit2, Trash2, Save, X, Search as SearchIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Edit2, Trash2, Save, X, Search as SearchIcon, ChevronLeft, ChevronRight, Folder, Settings2 } from 'lucide-react';
 import AddWord from './AddWord';
+import FolderManagerModal from './FolderManagerModal';
 
-const WordList = ({ words, settings, topics, addTopic, updateWord, deleteWord, addWord, addWords }) => {
+const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, updateFolder, deleteFolder, updateWord, deleteWord, addWord, addWords }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ word: '', meaning: '', example: '' });
@@ -10,6 +11,8 @@ const WordList = ({ words, settings, topics, addTopic, updateWord, deleteWord, a
   const [filterTag, setFilterTag] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState(''); // '', due, mastered, new
+  const [activeFolderId, setActiveFolderId] = useState('default');
+  const [showFolderManager, setShowFolderManager] = useState(false);
   const ITEMS_PER_PAGE = 15;
 
   const availableTags = useMemo(() => {
@@ -29,8 +32,15 @@ const WordList = ({ words, settings, topics, addTopic, updateWord, deleteWord, a
   const filteredWords = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     const today = new Date().setHours(0, 0, 0, 0);
+    const activeFolder = folders.find(f => f.id === activeFolderId);
 
     return words.filter((w) => {
+      if (activeFolder && !activeFolder.isDefault) {
+        const hasTag = (w.tags || []).some(t => (activeFolder.tags || []).includes(t));
+        const hasId = (activeFolder.wordIds || []).includes(w.id);
+        if (!hasTag && !hasId) return false;
+      }
+      
       if (filterTag && !(w.tags || []).includes(filterTag)) return false;
       if (filterType && w.wordType !== filterType) return false;
       if (filterStatus === 'mastered' && !(w.repetition >= 3)) return false;
@@ -46,7 +56,7 @@ const WordList = ({ words, settings, topics, addTopic, updateWord, deleteWord, a
         (w.wordType && w.wordType.toLowerCase().includes(q))
       );
     });
-  }, [words, searchTerm, filterTag, filterType, filterStatus]);
+  }, [words, searchTerm, filterTag, filterType, filterStatus, activeFolderId, folders]);
 
   const totalItems = filteredWords.length;
   const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
@@ -144,12 +154,34 @@ const WordList = ({ words, settings, topics, addTopic, updateWord, deleteWord, a
 
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '0.75rem' }}>
         <div className="flex-between" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
-          <h2 style={{ fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            Thư viện từ{' '}
-            <span className="text-muted" style={{ fontSize: '0.85rem' }}>
-              ({words.length})
-            </span>
-          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <h2 style={{ fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              Thư viện từ{' '}
+              <span className="text-muted" style={{ fontSize: '0.85rem' }}>
+                ({totalItems})
+              </span>
+            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'var(--glass-bg)', padding: '0.25rem', borderRadius: '8px' }}>
+              <select 
+                value={activeFolderId} 
+                onChange={(e) => setActiveFolderId(e.target.value)}
+                className="input-field"
+                style={{ padding: '0.25rem 0.5rem', minHeight: 'auto', fontSize: '0.85rem', width: 'auto', background: 'transparent', border: 'none' }}
+              >
+                {folders.map(f => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+              <button 
+                onClick={() => setShowFolderManager(true)}
+                className="btn btn-outline" 
+                style={{ padding: '0.3rem', border: 'none', background: 'transparent' }} 
+                title="Quản lý thư mục"
+              >
+                <Settings2 size={16} />
+              </button>
+            </div>
+          </div>
 
           <div style={{ position: 'relative', width: 'min(220px, 100%)' }}>
             <SearchIcon
@@ -499,6 +531,19 @@ const WordList = ({ words, settings, topics, addTopic, updateWord, deleteWord, a
           </div>
         )}
       </div>
+
+      {showFolderManager && (
+        <FolderManagerModal 
+          folders={folders}
+          addFolder={addFolder}
+          updateFolder={updateFolder}
+          deleteFolder={deleteFolder}
+          availableTags={availableTags}
+          activeFolderId={activeFolderId}
+          setActiveFolderId={setActiveFolderId}
+          onClose={() => setShowFolderManager(false)}
+        />
+      )}
     </div>
   );
 };
