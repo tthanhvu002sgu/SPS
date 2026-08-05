@@ -148,7 +148,47 @@ const FolderManagerModal = ({ folders, addFolder, updateFolder, deleteFolder, av
             </div>
           ))}
           
-          {editingId !== 'new' && (
+          {editingId === 'new' ? (
+            <div style={{
+              padding: '0.75rem', borderRadius: '8px',
+              border: '1px dashed var(--accent-primary)',
+              background: 'rgba(59, 130, 246, 0.05)',
+              display: 'flex', flexDirection: 'column', gap: '0.75rem'
+            }}>
+              <h4 style={{ margin: 0, fontSize: '0.95rem' }}>Tạo thư mục mới</h4>
+              <input
+                type="text"
+                className="input-field"
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                placeholder="Nhập tên thư mục..."
+                autoFocus
+              />
+              <div>
+                <p style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>Tự động thêm từ theo Tag (Smart Folder):</p>
+                <div className="filter-chips">
+                  {availableTags.length === 0 ? (
+                    <span className="text-muted" style={{ fontSize: '0.8rem' }}>Chưa có tag nào trong thư viện</span>
+                  ) : (
+                    availableTags.map(tag => (
+                      <button
+                        key={tag}
+                        type="button"
+                        className={`chip ${editTags.includes(tag) ? 'chip-active' : ''}`}
+                        onClick={() => toggleTag(tag)}
+                      >
+                        #{tag}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                <button onClick={() => setEditingId(null)} className="btn btn-outline" style={{ padding: '0.4rem 0.8rem' }}>Hủy</button>
+                <button onClick={() => handleSave('new')} className="btn btn-primary" style={{ padding: '0.4rem 0.8rem' }}><Save size={14} /> Lưu thư mục</button>
+              </div>
+            </div>
+          ) : (
             <button 
               onClick={() => {
                 setEditingId('new');
