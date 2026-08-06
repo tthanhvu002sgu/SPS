@@ -84,6 +84,45 @@ p {
   transition: box-shadow 0.2s ease;
 }
 
+.modal-panel {
+  background: var(--bg-dark);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+  padding: 1.5rem;
+  color: var(--text-main);
+}
+
+[data-theme="sepia"] .modal-panel {
+  background: #F4EEDD;
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.15);
+  color: #2B2B2B;
+}
+
+.folder-item {
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+[data-theme="sepia"] .folder-item {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.folder-item-active {
+  background: rgba(59, 130, 246, 0.15) !important;
+  border-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+[data-theme="sepia"] .folder-item-active {
+  background: rgba(192, 57, 43, 0.12) !important;
+  border-color: rgba(192, 57, 43, 0.35) !important;
+}
+
 @media (min-width: 768px) {
   .glass-panel {
     backdrop-filter: blur(8px);
@@ -354,32 +393,49 @@ p {
 .filter-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
 
 .chip {
   border: 1px solid var(--glass-border);
-  background: transparent;
-  color: var(--text-muted);
-  padding: 0.25rem 0.65rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  padding: 0.3rem 0.75rem;
   border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.8rem;
+  font-weight: 500;
   font-family: var(--font-family);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: all 0.15s ease;
+}
+
+[data-theme="sepia"] .chip {
+  background: rgba(0, 0, 0, 0.06);
+  color: #332D27;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.chip:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+[data-theme="sepia"] .chip:hover {
+  background: rgba(0, 0, 0, 0.12);
 }
 
 .chip-active {
-  background: rgba(59, 130, 246, 0.15);
-  color: var(--accent-primary);
-  border-color: rgba(59, 130, 246, 0.35);
+  background: var(--accent-primary) !important;
+  color: #ffffff !important;
+  border-color: var(--accent-primary) !important;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
 [data-theme="sepia"] .chip-active {
-  background: rgba(192, 57, 43, 0.1);
-  color: var(--accent-primary);
-  border-color: rgba(192, 57, 43, 0.3);
+  background: var(--accent-primary) !important;
+  color: #ffffff !important;
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 2px 8px rgba(192, 57, 43, 0.25);
 }
 
 /* Session progress */

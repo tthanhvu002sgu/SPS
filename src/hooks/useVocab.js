@@ -280,15 +280,39 @@ export const useVocab = () => {
   }, []);
 
   const addFolder = useCallback((newFolder) => {
-    setFolders(prev => [...prev, newFolder]);
+    setFolders(prev => {
+      const next = [...prev, newFolder];
+      try {
+        localStorage.setItem(FOLDERS_KEY, JSON.stringify(next));
+      } catch (e) {
+        console.error('Lỗi lưu folder:', e);
+      }
+      return next;
+    });
   }, []);
 
   const updateFolder = useCallback((updatedFolder) => {
-    setFolders(prev => prev.map(f => f.id === updatedFolder.id ? updatedFolder : f));
+    setFolders(prev => {
+      const next = prev.map(f => f.id === updatedFolder.id ? updatedFolder : f);
+      try {
+        localStorage.setItem(FOLDERS_KEY, JSON.stringify(next));
+      } catch (e) {
+        console.error('Lỗi cập nhật folder:', e);
+      }
+      return next;
+    });
   }, []);
 
   const deleteFolder = useCallback((id) => {
-    setFolders(prev => prev.filter(f => f.id !== id));
+    setFolders(prev => {
+      const next = prev.filter(f => f.id !== id);
+      try {
+        localStorage.setItem(FOLDERS_KEY, JSON.stringify(next));
+      } catch (e) {
+        console.error('Lỗi xóa folder:', e);
+      }
+      return next;
+    });
   }, []);
 
   const addWord = useCallback((newWord) => {

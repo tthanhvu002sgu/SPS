@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Edit2, Trash2, Save, X, Search as SearchIcon, ChevronLeft, ChevronRight, Folder, Settings2 } from 'lucide-react';
 import AddWord from './AddWord';
 import FolderManagerModal from './FolderManagerModal';
+import { DEFAULT_TOPICS, WORD_TYPES } from '../utils/tags';
 
 const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, updateFolder, deleteFolder, updateWord, deleteWord, addWord, addWords }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -16,17 +17,23 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
   const ITEMS_PER_PAGE = 15;
 
   const availableTags = useMemo(() => {
-    const set = new Set();
-    words.forEach((w) => (w.tags || []).forEach((t) => set.add(t)));
-    return Array.from(set).sort();
-  }, [words]);
+    const set = new Set([...(topics || []), ...DEFAULT_TOPICS, ...WORD_TYPES]);
+    words.forEach((w) => {
+      (w.tags || []).forEach((t) => set.add(t));
+      if (w.wordType) set.add(w.wordType);
+    });
+    folders.forEach((f) => {
+      (f.tags || []).forEach((t) => set.add(t));
+    });
+    return Array.from(set).filter(Boolean).sort();
+  }, [words, topics, folders]);
 
   const availableTypes = useMemo(() => {
-    const set = new Set();
+    const set = new Set(WORD_TYPES);
     words.forEach((w) => {
       if (w.wordType) set.add(w.wordType);
     });
-    return Array.from(set).sort();
+    return Array.from(set).filter(Boolean).sort();
   }, [words]);
 
   const filteredWords = useMemo(() => {
@@ -37,8 +44,9 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
     return words.filter((w) => {
       if (activeFolder && !activeFolder.isDefault) {
         const hasTag = (w.tags || []).some(t => (activeFolder.tags || []).includes(t));
+        const hasType = (activeFolder.tags || []).includes(w.wordType);
         const hasId = (activeFolder.wordIds || []).includes(w.id);
-        if (!hasTag && !hasId) return false;
+        if (!hasTag && !hasType && !hasId) return false;
       }
       
       if (filterTag && !(w.tags || []).includes(filterTag)) return false;
@@ -534,6 +542,7 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
 
       {showFolderManager && (
         <FolderManagerModal 
+          words={words}
           folders={folders}
           addFolder={addFolder}
           updateFolder={updateFolder}
