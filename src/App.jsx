@@ -97,6 +97,7 @@ function App() {
               words={words}
               settings={settings}
               topics={topics}
+              folders={folders}
               onUpdateWord={updateWord}
               onDeleteWord={deleteWord}
               recordReview={recordReview}

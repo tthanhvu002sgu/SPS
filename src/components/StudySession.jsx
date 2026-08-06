@@ -11,6 +11,7 @@ import {
   Trash2,
   Undo2,
   SkipForward,
+  Folder,
 } from 'lucide-react';
 import { processReview } from '../utils/srs';
 import Dashboard from './Dashboard';
@@ -48,6 +49,7 @@ const StudySession = ({
   words,
   settings,
   topics = [],
+  folders = [],
   onUpdateWord,
   onDeleteWord,
   recordReview,
@@ -65,6 +67,7 @@ const StudySession = ({
   const [randomFrontBack, setRandomFrontBack] = useState(false);
   const [showReverse, setShowReverse] = useState(false);
   const [skipSentenceThisSession, setSkipSentenceThisSession] = useState(false);
+  const [filterFolderId, setFilterFolderId] = useState('default');
   const [filterTag, setFilterTag] = useState('');
   const [sessionTotal, setSessionTotal] = useState(0);
   const [undoStack, setUndoStack] = useState(null);
@@ -90,15 +93,43 @@ const StudySession = ({
 
   const availableTags = useMemo(() => {
     const set = new Set();
-    words.forEach((w) => (w.tags || []).forEach((t) => set.add(t)));
-    (topics || []).forEach((t) => set.add(t));
+    let sourceWords = words;
+    if (filterFolderId && filterFolderId !== 'default') {
+      const activeFolder = folders.find((f) => f.id === filterFolderId);
+      if (activeFolder) {
+        sourceWords = words.filter((w) => {
+          const hasTag = (w.tags || []).some((t) => (activeFolder.tags || []).includes(t));
+          const hasType = (activeFolder.tags || []).includes(w.wordType);
+          const hasId = (activeFolder.wordIds || []).includes(w.id);
+          return hasTag || hasType || hasId;
+        });
+      }
+    }
+    sourceWords.forEach((w) => (w.tags || []).forEach((t) => set.add(t)));
     return Array.from(set).sort();
-  }, [words, topics]);
+  }, [words, folders, filterFolderId]);
 
   const filteredPool = useMemo(() => {
-    if (!filterTag) return words;
-    return words.filter((w) => (w.tags || []).includes(filterTag));
-  }, [words, filterTag]);
+    let pool = words;
+
+    if (filterFolderId && filterFolderId !== 'default') {
+      const activeFolder = folders.find((f) => f.id === filterFolderId);
+      if (activeFolder) {
+        pool = pool.filter((w) => {
+          const hasTag = (w.tags || []).some((t) => (activeFolder.tags || []).includes(t));
+          const hasType = (activeFolder.tags || []).includes(w.wordType);
+          const hasId = (activeFolder.wordIds || []).includes(w.id);
+          return hasTag || hasType || hasId;
+        });
+      }
+    }
+
+    if (filterTag) {
+      pool = pool.filter((w) => (w.tags || []).includes(filterTag));
+    }
+
+    return pool;
+  }, [words, filterFolderId, folders, filterTag]);
 
   const translateToVi = async (text) => {
     try {
@@ -639,6 +670,40 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
               Luyện tự do
             </button>
           </div>
+
+          {folders.length > 0 && (
+            <div>
+              <p style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Folder size={15} className="text-gradient" /> Chọn Thư mục học:
+              </p>
+              <div className="filter-chips">
+                {folders.map((f) => {
+                  const count = f.isDefault
+                    ? words.length
+                    : words.filter((w) => {
+                        const hasTag = (w.tags || []).some((t) => (f.tags || []).includes(t));
+                        const hasType = (f.tags || []).includes(w.wordType);
+                        const hasId = (f.wordIds || []).includes(w.id);
+                        return hasTag || hasType || hasId;
+                      }).length;
+
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      className={`chip ${filterFolderId === f.id ? 'chip-active' : ''}`}
+                      onClick={() => {
+                        setFilterFolderId(f.id);
+                        setFilterTag('');
+                      }}
+                    >
+                      {f.name} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {availableTags.length > 0 && (
             <div>
