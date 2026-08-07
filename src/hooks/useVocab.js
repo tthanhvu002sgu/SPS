@@ -137,6 +137,20 @@ const fillMissingViMeanings = async (words, onBatch, concurrency = 4) => {
   }
 };
 
+const getUsedTags = (wordList) => {
+  const set = new Set();
+  (wordList || []).forEach((w) => {
+    if (Array.isArray(w.tags)) {
+      w.tags.forEach((t) => {
+        if (t && typeof t === 'string' && t.trim()) {
+          set.add(t.trim());
+        }
+      });
+    }
+  });
+  return Array.from(set).sort();
+};
+
 export const useVocab = () => {
   const [words, setWords] = useState([]);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
@@ -154,14 +168,12 @@ export const useVocab = () => {
       ...DEFAULT_SETTINGS,
       ...safeParse(localStorage.getItem(SETTINGS_KEY), {}),
     };
-    const storedTopics = safeParse(localStorage.getItem(TOPICS_KEY), null);
     const storedFolders = safeParse(localStorage.getItem(FOLDERS_KEY), [{ id: 'default', name: 'Default', isDefault: true, wordIds: [], tags: [] }]);
     const storedHistory = safeParse(localStorage.getItem(HISTORY_KEY), {});
 
-    const topicsList = storedTopics?.length ? storedTopics : DEFAULT_TOPICS;
-    if (!storedTopics?.length) {
-      localStorage.setItem(TOPICS_KEY, JSON.stringify(DEFAULT_TOPICS));
-    }
+    const { words: dayResetWords, changed } = resetReviewedIfNewDay(storedWords);
+    const initialUsedTags = getUsedTags(dayResetWords);
+    localStorage.setItem(TOPICS_KEY, JSON.stringify(initialUsedTags));
     
     if (!localStorage.getItem(FOLDERS_KEY)) {
       localStorage.setItem(FOLDERS_KEY, JSON.stringify(storedFolders));
@@ -187,9 +199,7 @@ export const useVocab = () => {
       }
     }
 
-    const { words: dayResetWords, changed } = resetReviewedIfNewDay(storedWords);
-
-    setTopics(topicsList);
+    setTopics(initialUsedTags);
     setFolders(storedFolders);
     setSettings(storedSettings);
     setReviewHistory(initialHistory);
@@ -216,7 +226,7 @@ export const useVocab = () => {
           exportedAt: new Date().toISOString(),
           words: dayResetWords,
           settings: storedSettings,
-          topics: topicsList,
+          topics: initialUsedTags,
           folders: storedFolders,
           reviewHistory: initialHistory,
         })
@@ -227,6 +237,22 @@ export const useVocab = () => {
     // Background VI fill — non-blocking
     fillMissingViMeanings(dayResetWords, setWords).catch(() => {});
   }, []);
+
+  // Auto-prune tags when no words contain that tag
+  useEffect(() => {
+    if (!hydratedRef.current || isLoading) return;
+
+    const currentUsedTags = getUsedTags(words);
+    setTopics((prev) => {
+      if (
+        prev.length === currentUsedTags.length &&
+        prev.every((t, i) => t === currentUsedTags[i])
+      ) {
+        return prev;
+      }
+      return currentUsedTags;
+    });
+  }, [words, isLoading]);
 
   // Apply theme when settings change
   useEffect(() => {
@@ -244,9 +270,7 @@ export const useVocab = () => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(words));
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-        if (topics.length > 0) {
-          localStorage.setItem(TOPICS_KEY, JSON.stringify(topics));
-        }
+        localStorage.setItem(TOPICS_KEY, JSON.stringify(topics));
         if (folders.length > 0) {
           localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders));
         }

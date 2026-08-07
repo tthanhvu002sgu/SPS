@@ -13,6 +13,8 @@ export const autoTagWords = async (wordsToTag, apiKey, topics = DEFAULT_TOPICS, 
   // Tạo danh sách các từ vựng cần phân tích (để đưa vào prompt)
   const wordsContext = wordsList.map((w, idx) => `[${idx}] ${w.word}${w.meaning ? ` (nghĩa: ${w.meaning})` : ''}${w.viMeaning ? ` (tiếng Việt: ${w.viMeaning})` : ''}`).join('\n');
 
+  const activeTopics = (Array.isArray(topics) && topics.length > 0) ? topics : DEFAULT_TOPICS;
+
   const prompt = `
 Bạn là một chuyên gia ngôn ngữ học. Nhiệm vụ của bạn là phân loại các từ vựng sau đây vào đúng Từ Loại (wordType) và Chủ Đề (tags).
 
@@ -22,7 +24,7 @@ ${WORD_TYPES.map(t => `- "${t}"`).join('\n')}
 
 2. **tags**: Nếu có chủ đề phù hợp trong danh sách có sẵn dưới đây, hãy chọn tối đa 2 chủ đề và điền vào mảng \`tags\`. ĐỂ TRỐNG \`suggestedNewTag\`.
 Danh sách chủ đề có sẵn:
-${topics.map(t => `- "${t}"`).join('\n')}
+${activeTopics.map(t => `- "${t}"`).join('\n')}
 
 3. **Đề xuất Tag mới (Rất Quan Trọng)**: Nếu KHÔNG CÓ chủ đề nào trong danh sách trên thực sự phù hợp (ví dụ: từ chuyên ngành hẹp, khái niệm mới), hãy:
    - ĐỂ TRỐNG mảng \`tags\` ([]).

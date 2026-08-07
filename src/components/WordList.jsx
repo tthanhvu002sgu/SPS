@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Edit2, Trash2, Save, X, Search as SearchIcon, ChevronLeft, ChevronRight, Folder, Settings2 } from 'lucide-react';
 import AddWord from './AddWord';
 import FolderManagerModal from './FolderManagerModal';
-import { DEFAULT_TOPICS, WORD_TYPES } from '../utils/tags';
+import { WORD_TYPES } from '../utils/tags';
 
 const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, updateFolder, deleteFolder, updateWord, deleteWord, addWord, addWords }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -17,16 +17,22 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
   const ITEMS_PER_PAGE = 15;
 
   const availableTags = useMemo(() => {
-    const set = new Set([...(topics || []), ...DEFAULT_TOPICS, ...WORD_TYPES]);
+    const set = new Set();
     words.forEach((w) => {
-      (w.tags || []).forEach((t) => set.add(t));
-      if (w.wordType) set.add(w.wordType);
+      (w.tags || []).forEach((t) => {
+        if (t && typeof t === 'string' && t.trim()) {
+          set.add(t.trim());
+        }
+      });
     });
-    folders.forEach((f) => {
-      (f.tags || []).forEach((t) => set.add(t));
-    });
-    return Array.from(set).filter(Boolean).sort();
-  }, [words, topics, folders]);
+    return Array.from(set).sort();
+  }, [words]);
+
+  useEffect(() => {
+    if (filterTag && !availableTags.includes(filterTag)) {
+      setFilterTag('');
+    }
+  }, [availableTags, filterTag]);
 
   const availableTypes = useMemo(() => {
     const set = new Set(WORD_TYPES);
