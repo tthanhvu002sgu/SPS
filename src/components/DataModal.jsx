@@ -108,25 +108,36 @@ const DataModal = ({
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
         const importedWords = jsonData
-          .map((row) => ({
-            id: uuidv4(),
-            word: String(row.Word || row.word || '').trim(),
-            phonetic: String(row.Phonetic || row.phonetic || '').trim(),
-            wordType: String(row.Type || row.type || row.wordType || '').trim(),
-            meaning: String(row['Meaning (EN)'] || row.meaning || '').trim(),
-            viMeaning: String(row['Meaning (VI)'] || row.viMeaning || '').trim(),
-            example: String(row.Example || row.example || '').trim(),
-            tags: (row.Tags || row.tags)
-              ? String(row.Tags || row.tags)
-                  .split(',')
-                  .map((t) => t.trim())
-                  .filter(Boolean)
-              : [],
-            repetition: 0,
-            interval: 1,
-            ease: 2.5,
-            nextReviewDate: new Date().setHours(0, 0, 0, 0),
-          }))
+          .map((row) => {
+            const getVal = (keys) => {
+              for (const k of Object.keys(row)) {
+                if (keys.includes(String(k).toLowerCase().trim())) {
+                  return row[k];
+                }
+              }
+              return '';
+            };
+
+            return {
+              id: uuidv4(),
+              word: String(getVal(['word', 'từ', 'từ vựng', 'vocab'])).trim(),
+              phonetic: String(getVal(['phonetic', 'phiên âm', 'pronunciation'])).trim(),
+              wordType: String(getVal(['type', 'word type', 'từ loại'])).trim(),
+              meaning: String(getVal(['meaning (en)', 'meaning', 'english', 'định nghĩa'])).trim(),
+              viMeaning: String(getVal(['meaning (vi)', 'vietnamese', 'vi', 'nghĩa tiếng việt', 'nghĩa vi', 'dịch nghĩa', 'nghĩa'])).trim(),
+              example: String(getVal(['example', 'examples', 'example chunks', 'ví dụ', 'câu ví dụ', 'sentence'])).trim(),
+              tags: getVal(['tags', 'tag', 'chủ đề'])
+                ? String(getVal(['tags', 'tag', 'chủ đề']))
+                    .split(',')
+                    .map((t) => t.trim())
+                    .filter(Boolean)
+                : [],
+              repetition: 0,
+              interval: 1,
+              ease: 2.5,
+              nextReviewDate: new Date().setHours(0, 0, 0, 0),
+            };
+          })
           .filter((w) => w.word !== '');
 
         if (importedWords.length === 0) {
