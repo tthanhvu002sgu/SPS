@@ -9,15 +9,11 @@ const Settings = ({
   updateSettings,
   importData,
   importSnapshot,
-  getFullSnapshotForBackup,
   clearAllWords,
 }) => {
   const [localSettings, setLocalSettings] = React.useState(settings);
   const [saved, setSaved] = React.useState(false);
   const [dataMessage, setDataMessage] = React.useState('');
-  const [importMode, setImportMode] = React.useState('merge');
-  const fileInputRef = useRef(null);
-  const excelInputRef = useRef(null);
   React.useEffect(() => {
     setLocalSettings(settings);
   }, [settings]);
@@ -68,165 +64,7 @@ const Settings = ({
     setTimeout(() => setSaved(false), 3000);
   };
 
-  const handleExport = () => {
-    const snapshot = getFullSnapshotForBackup
-      ? getFullSnapshotForBackup()
-      : words;
-    const dataStr =
-      'data:text/json;charset=utf-8,' +
-      encodeURIComponent(JSON.stringify(snapshot, null, 2));
-    const node = document.createElement('a');
-    node.setAttribute('href', dataStr);
-    node.setAttribute(
-      'download',
-      `spacedrep_backup_${new Date().toISOString().split('T')[0]}.json`
-    );
-    document.body.appendChild(node);
-    node.click();
-    node.remove();
-    setDataMessage('Đã xuất bản sao lưu đầy đủ (từ + lịch sử + cài đặt).');
-    setTimeout(() => setDataMessage(''), 3000);
-  };
 
-  const handleImport = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const importedData = JSON.parse(event.target.result);
-        const label =
-          importMode === 'replace'
-            ? 'GHI ĐÈ toàn bộ dữ liệu hiện tại'
-            : 'GỘP (merge) vào dữ liệu hiện tại — giữ SRS của từ đã có';
-        const count = Array.isArray(importedData)
-          ? importedData.length
-          : importedData?.words?.length || 0;
-
-        if (
-          !window.confirm(
-            `Import ${count} từ — chế độ: ${label}.\n\nTiếp tục?`
-          )
-        ) {
-          return;
-        }
-
-        if (importSnapshot) {
-          const result = importSnapshot(importedData, importMode);
-          setDataMessage(
-            importMode === 'replace'
-              ? `Đã thay thế bằng ${result.total} từ.`
-              : `Đã gộp: +${result.added} mới, cập nhật ${result.updated}.`
-          );
-        } else if (Array.isArray(importedData)) {
-          importData(importedData);
-          setDataMessage('Đã import thành công.');
-        } else {
-          alert('Định dạng file không hợp lệ.');
-          return;
-        }
-        setTimeout(() => setDataMessage(''), 4000);
-      } catch {
-        alert('Không đọc được file backup (JSON lỗi).');
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = null;
-  };
-
-  const handleExportExcel = () => {
-    if (words.length === 0) {
-      alert('Không có từ vựng nào để xuất.');
-      return;
-    }
-    const data = words.map((w) => ({
-      Word: w.word,
-      Phonetic: w.phonetic || '',
-      Type: w.wordType || '',
-      'Meaning (EN)': w.meaning || '',
-      'Meaning (VI)': w.viMeaning || '',
-      Example: w.example || '',
-      Tags: (w.tags || []).join(', '),
-    }));
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Vocab');
-    XLSX.writeFile(wb, `spacedrep_vocab_${new Date().toISOString().split('T')[0]}.xlsx`);
-    setDataMessage('Đã xuất file Excel.');
-    setTimeout(() => setDataMessage(''), 3000);
-  };
-
-  const handleImportExcel = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = new Uint8Array(event.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-        const importedWords = jsonData
-          .map((row) => ({
-            id: uuidv4(),
-            word: String(row.Word || row.word || '').trim(),
-            phonetic: String(row.Phonetic || row.phonetic || '').trim(),
-            wordType: String(row.Type || row.type || row.wordType || '').trim(),
-            meaning: String(row['Meaning (EN)'] || row.meaning || '').trim(),
-            viMeaning: String(row['Meaning (VI)'] || row.viMeaning || '').trim(),
-            example: String(row.Example || row.example || '').trim(),
-            tags: (row.Tags || row.tags)
-              ? String(row.Tags || row.tags)
-                  .split(',')
-                  .map((t) => t.trim())
-                  .filter(Boolean)
-              : [],
-            repetition: 0,
-            interval: 1,
-            ease: 2.5,
-            nextReviewDate: new Date().setHours(0, 0, 0, 0),
-          }))
-          .filter((w) => w.word !== '');
-
-        if (importedWords.length === 0) {
-          alert('Không tìm thấy từ vựng nào hợp lệ trong file Excel.');
-          return;
-        }
-
-        const label =
-          importMode === 'replace'
-            ? 'GHI ĐÈ toàn bộ dữ liệu hiện tại'
-            : 'GỘP (merge) vào dữ liệu hiện tại — giữ SRS của từ đã có';
-
-        if (
-          !window.confirm(
-            `Import ${importedWords.length} từ từ Excel — chế độ: ${label}.\n\nTiếp tục?`
-          )
-        ) {
-          return;
-        }
-
-        if (importSnapshot) {
-          const result = importSnapshot(importedWords, importMode);
-          setDataMessage(
-            importMode === 'replace'
-              ? `Đã thay thế bằng ${result.total} từ.`
-              : `Đã gộp: +${result.added} mới, cập nhật ${result.updated}.`
-          );
-        }
-      } catch (error) {
-        console.error('Excel import error:', error);
-        alert('Lỗi đọc file Excel. Vui lòng kiểm tra lại định dạng.');
-      }
-      setTimeout(() => setDataMessage(''), 4000);
-    };
-    reader.readAsArrayBuffer(file);
-    e.target.value = null;
-  };
 
   const handleRestoreAutoBackup = () => {
     const fullStr = localStorage.getItem('spacedrep_full_backup');
@@ -499,65 +337,10 @@ const Settings = ({
         </h2>
 
         <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
-          App tự backup mỗi ngày. Export đầy đủ gồm từ vựng, lịch sử ôn, chủ đề và cài đặt.
+          App tự backup mỗi ngày. (Tính năng Export/Import đã được chuyển sang tab Thư Viện).
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-            <button onClick={handleExport} className="btn btn-outline" style={{ justifyContent: 'center' }}>
-              <Download size={16} /> Xuất Backup (JSON)
-            </button>
-            <button onClick={handleExportExcel} className="btn btn-outline" style={{ justifyContent: 'center', color: 'var(--accent-success)', borderColor: 'rgba(16,185,129,0.3)' }}>
-              <FileSpreadsheet size={16} /> Xuất Excel
-            </button>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, fontSize: '0.85rem' }}>
-              Chế độ import
-            </label>
-            <select
-              className="input-field"
-              value={importMode}
-              onChange={(e) => setImportMode(e.target.value)}
-              style={{ marginBottom: '0.5rem' }}
-            >
-              <option value="merge">Gộp (merge) — giữ SRS từ đã có</option>
-              <option value="replace">Ghi đè toàn bộ</option>
-            </select>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-              <button
-                onClick={() => fileInputRef.current.click()}
-                className="btn btn-outline"
-                style={{ justifyContent: 'center' }}
-              >
-                <Upload size={16} /> Import JSON
-              </button>
-              <button
-                onClick={() => excelInputRef.current.click()}
-                className="btn btn-outline"
-                style={{ justifyContent: 'center', color: 'var(--accent-success)', borderColor: 'rgba(16,185,129,0.3)' }}
-              >
-                <FileSpreadsheet size={16} /> Import Excel
-              </button>
-            </div>
-
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleImport}
-              accept=".json"
-              style={{ display: 'none' }}
-            />
-            <input
-              type="file"
-              ref={excelInputRef}
-              onChange={handleImportExcel}
-              accept=".xlsx, .xls, .csv"
-              style={{ display: 'none' }}
-            />
-          </div>
 
           <button
             onClick={handleRestoreAutoBackup}

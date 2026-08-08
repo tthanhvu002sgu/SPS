@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Edit2, Trash2, Save, X, Search as SearchIcon, ChevronLeft, ChevronRight, Folder, Settings2, Filter, Tag } from 'lucide-react';
+import { Edit2, Trash2, Save, X, Search as SearchIcon, ChevronLeft, ChevronRight, Folder, Settings2, Filter, Tag, Download } from 'lucide-react';
 import AddWord from './AddWord';
 import FolderManagerModal from './FolderManagerModal';
+import DataModal from './DataModal';
 import { WORD_TYPES, isWordType, isStatusTag } from '../utils/tags';
 
-const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, updateFolder, deleteFolder, updateWord, deleteWord, addWord, addWords }) => {
+const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, updateFolder, deleteFolder, updateWord, deleteWord, addWord, addWords, importData, importSnapshot, getFullSnapshotForBackup }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ word: '', meaning: '', example: '' });
@@ -12,8 +13,10 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
   const [filterTag, setFilterTag] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState(''); // '', due, mastered, new
+  const [filterMissing, setFilterMissing] = useState(''); // '', 'meaning', 'example', 'phonetic'
   const [activeFolderId, setActiveFolderId] = useState('default');
   const [showFolderManager, setShowFolderManager] = useState(false);
+  const [showDataModal, setShowDataModal] = useState(false);
   const ITEMS_PER_PAGE = 15;
 
   const availableTags = useMemo(() => {
@@ -72,6 +75,10 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
       if (filterStatus === 'new' && w.repetition !== 0) return false;
       if (filterStatus === 'due' && !(w.nextReviewDate <= today && !w.isReviewedToday)) return false;
 
+      if (filterMissing === 'meaning' && (w.meaning || w.viMeaning)) return false;
+      if (filterMissing === 'example' && w.example) return false;
+      if (filterMissing === 'phonetic' && w.phonetic) return false;
+
       if (!q) return true;
       return (
         w.word.toLowerCase().includes(q) ||
@@ -81,7 +88,7 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
         (w.wordType && w.wordType.toLowerCase().includes(q))
       );
     });
-  }, [words, searchTerm, filterTag, filterType, filterStatus, activeFolderId, folders]);
+  }, [words, searchTerm, filterTag, filterType, filterStatus, filterMissing, activeFolderId, folders]);
 
   const totalItems = filteredWords.length;
   const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
@@ -152,6 +159,7 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
     setFilterTag('');
     setFilterType('');
     setFilterStatus('');
+    setFilterMissing('');
     setSearchTerm('');
     setCurrentPage(1);
   };
@@ -204,6 +212,14 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
                 title="Quản lý thư mục"
               >
                 <Settings2 size={16} />
+              </button>
+              <button 
+                onClick={() => setShowDataModal(true)}
+                className="btn btn-outline" 
+                style={{ padding: '0.3rem', border: 'none', background: 'transparent' }} 
+                title="Nhập / Xuất dữ liệu"
+              >
+                <Download size={16} />
               </button>
             </div>
           </div>
@@ -305,7 +321,34 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
               ))}
             </select>
 
-            {(filterStatus || filterType || filterTag || searchTerm) && (
+            {/* Missing Data Filter Dropdown */}
+            <select
+              value={filterMissing}
+              onChange={(e) => {
+                setFilterMissing(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="input-field"
+              style={{
+                padding: '0.3rem 0.75rem',
+                fontSize: '0.8rem',
+                width: 'auto',
+                minHeight: 'auto',
+                borderRadius: '8px',
+                background: filterMissing ? 'rgba(59, 130, 246, 0.15)' : 'rgba(0, 0, 0, 0.05)',
+                borderColor: filterMissing ? 'var(--accent-secondary)' : 'var(--glass-border)',
+                color: filterMissing ? 'var(--accent-secondary)' : 'var(--text-main)',
+                fontWeight: filterMissing ? 600 : 400,
+                cursor: 'pointer',
+              }}
+            >
+              <option value="" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Dữ liệu: Đầy đủ/Tất cả</option>
+              <option value="meaning" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Thiếu nghĩa</option>
+              <option value="example" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Thiếu câu ví dụ</option>
+              <option value="phonetic" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Thiếu phiên âm</option>
+            </select>
+
+            {(filterStatus || filterType || filterTag || filterMissing || searchTerm) && (
               <button
                 type="button"
                 onClick={resetFilters}
@@ -618,6 +661,17 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
           activeFolderId={activeFolderId}
           setActiveFolderId={setActiveFolderId}
           onClose={() => setShowFolderManager(false)}
+        />
+      )}
+
+      {showDataModal && (
+        <DataModal
+          words={words}
+          filteredWords={filteredWords}
+          importData={importData}
+          importSnapshot={importSnapshot}
+          getFullSnapshotForBackup={getFullSnapshotForBackup}
+          onClose={() => setShowDataModal(false)}
         />
       )}
     </div>

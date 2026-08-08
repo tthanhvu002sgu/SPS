@@ -1,4 +1,5 @@
-import React, { useState, Suspense, lazy } from 'react';
+import React, { Suspense, lazy } from 'react';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useVocab } from './hooks/useVocab';
 import StudySession from './components/StudySession';
 import { Sparkles, BrainCircuit, Settings as SettingsIcon, Library, Loader2 } from 'lucide-react';
@@ -53,12 +54,15 @@ function App() {
     streak,
   } = useVocab();
 
-  const [activeTab, setActiveTab] = useState('study');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const currentPath = location.pathname;
+  const activeTab = currentPath.substring(1) || 'study';
 
   const navItems = [
-    { id: 'study', label: 'Học', icon: <BrainCircuit size={20} /> },
-    { id: 'library', label: 'Thư viện', icon: <Library size={20} /> },
-    { id: 'settings', label: 'Cài đặt', icon: <SettingsIcon size={20} /> },
+    { id: 'study', path: '/study', label: 'Học', icon: <BrainCircuit size={20} /> },
+    { id: 'library', path: '/library', label: 'Thư viện', icon: <Library size={20} /> },
+    { id: 'settings', path: '/settings', label: 'Cài đặt', icon: <SettingsIcon size={20} /> },
   ];
 
   if (isLoading) {
@@ -80,7 +84,7 @@ function App() {
             <button
               key={item.id}
               type="button"
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => navigate(item.path)}
               className={`nav-pill ${activeTab === item.id ? 'nav-pill-active' : ''}`}
             >
               {item.icon}
@@ -91,60 +95,72 @@ function App() {
       </header>
 
       <main className="main-container">
-        <div className={`tab-panel ${activeTab === 'study' ? 'tab-panel-active' : ''}`}>
-          {activeTab === 'study' && (
-            <StudySession
-              words={words}
-              settings={settings}
-              topics={topics}
-              folders={folders}
-              onUpdateWord={updateWord}
-              onDeleteWord={deleteWord}
-              recordReview={recordReview}
-              undoRecordReview={undoRecordReview}
-              streak={streak}
-              reviewHistory={reviewHistory}
-              isActive={activeTab === 'study'}
-            />
-          )}
-        </div>
-
-        <div className={`tab-panel ${activeTab === 'library' ? 'tab-panel-active' : ''}`}>
-          {activeTab === 'library' && (
-            <Suspense fallback={<TabFallback />}>
-              <WordList
-                words={words}
-                settings={settings}
-                topics={topics}
-                folders={folders}
-                addTopic={addTopic}
-                addFolder={addFolder}
-                updateFolder={updateFolder}
-                deleteFolder={deleteFolder}
-                updateWord={updateWord}
-                deleteWord={deleteWord}
-                addWord={addWord}
-                addWords={addWords}
-              />
-            </Suspense>
-          )}
-        </div>
-
-        <div className={`tab-panel ${activeTab === 'settings' ? 'tab-panel-active' : ''}`}>
-          {activeTab === 'settings' && (
-            <Suspense fallback={<TabFallback />}>
-              <Settings
-                words={words}
-                settings={settings}
-                updateSettings={updateSettings}
-                importData={importData}
-                importSnapshot={importSnapshot}
-                getFullSnapshotForBackup={getFullSnapshotForBackup}
-                clearAllWords={clearAllWords}
-              />
-            </Suspense>
-          )}
-        </div>
+        <Routes>
+          <Route path="/" element={<Navigate to="/study" replace />} />
+          <Route
+            path="/study"
+            element={
+              <div className="tab-panel tab-panel-active">
+                <StudySession
+                  words={words}
+                  settings={settings}
+                  topics={topics}
+                  folders={folders}
+                  onUpdateWord={updateWord}
+                  onDeleteWord={deleteWord}
+                  recordReview={recordReview}
+                  undoRecordReview={undoRecordReview}
+                  streak={streak}
+                  reviewHistory={reviewHistory}
+                  isActive={true}
+                />
+              </div>
+            }
+          />
+          <Route
+            path="/library"
+            element={
+              <div className="tab-panel tab-panel-active">
+                <Suspense fallback={<TabFallback />}>
+                  <WordList
+                    words={words}
+                    settings={settings}
+                    topics={topics}
+                    folders={folders}
+                    addTopic={addTopic}
+                    addFolder={addFolder}
+                    updateFolder={updateFolder}
+                    deleteFolder={deleteFolder}
+                    updateWord={updateWord}
+                    deleteWord={deleteWord}
+                    addWord={addWord}
+                    addWords={addWords}
+                    importData={importData}
+                    importSnapshot={importSnapshot}
+                    getFullSnapshotForBackup={getFullSnapshotForBackup}
+                  />
+                </Suspense>
+              </div>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <div className="tab-panel tab-panel-active">
+                <Suspense fallback={<TabFallback />}>
+                  <Settings
+                    words={words}
+                    settings={settings}
+                    updateSettings={updateSettings}
+                    importData={importData}
+                    importSnapshot={importSnapshot}
+                    clearAllWords={clearAllWords}
+                  />
+                </Suspense>
+              </div>
+            }
+          />
+        </Routes>
       </main>
 
       <nav className="app-nav-mobile" aria-label="Điều hướng di động">
@@ -152,7 +168,7 @@ function App() {
           <button
             key={item.id}
             type="button"
-            onClick={() => setActiveTab(item.id)}
+            onClick={() => navigate(item.path)}
             className={`mobile-nav-item ${activeTab === item.id ? 'mobile-nav-active' : ''}`}
           >
             {item.icon}
