@@ -161,43 +161,90 @@ const DataModal = ({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1000 }}>
-      <div className="modal-content animate-scale-in" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-        <button onClick={onClose} className="modal-close" title="Đóng">
-          <X size={20} />
-        </button>
-
-        <h3 style={{ marginBottom: '1rem', fontSize: '1.25rem', color: 'var(--accent-primary)' }}>
-          Nhập / Xuất dữ liệu
-        </h3>
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0,0,0,0.65)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+        zIndex: 1000,
+        display: 'grid',
+        placeItems: 'center',
+        padding: '1rem',
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="modal-panel"
+        style={{
+          width: '100%',
+          maxWidth: '500px',
+          maxHeight: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1rem',
+          padding: '1.5rem',
+          overflowY: 'auto',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justify: 'space-between',
+            alignItems: 'center',
+            borderBottom: '1px solid var(--glass-border)',
+            paddingBottom: '0.75rem',
+          }}
+        >
+          <h3
+            style={{
+              fontSize: '1.2rem',
+              margin: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              color: 'var(--accent-primary)',
+            }}
+          >
+            Nhập / Xuất dữ liệu
+          </h3>
+          <button onClick={onClose} className="btn btn-outline" style={{ padding: '0.4rem' }} title="Đóng">
+            <X size={16} />
+          </button>
+        </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {/* Export Section */}
-          <div style={{ background: 'var(--glass-bg)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
-            <h4 style={{ marginBottom: '0.75rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <div style={{ background: 'rgba(0, 0, 0, 0.05)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+            <h4 style={{ marginBottom: '0.75rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <Download size={18} /> Xuất Dữ Liệu
             </h4>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <button onClick={() => handleExportJSON(false)} className="btn btn-outline" style={{ justifyContent: 'center' }}>
+              <button onClick={() => handleExportJSON(false)} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem' }}>
                 JSON (Tất cả)
               </button>
-              <button onClick={() => handleExportJSON(true)} className="btn btn-outline" style={{ justifyContent: 'center' }}>
+              <button onClick={() => handleExportJSON(true)} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem' }}>
                 JSON (Theo bộ lọc)
               </button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-              <button onClick={() => handleExportExcel(false)} className="btn btn-outline" style={{ justifyContent: 'center', color: 'var(--accent-success)', borderColor: 'rgba(16,185,129,0.3)' }}>
+              <button onClick={() => handleExportExcel(false)} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem', color: 'var(--accent-success)', borderColor: 'rgba(16,185,129,0.3)' }}>
                 Excel (Tất cả)
               </button>
-              <button onClick={() => handleExportExcel(true)} className="btn btn-outline" style={{ justifyContent: 'center', color: 'var(--accent-success)', borderColor: 'rgba(16,185,129,0.3)' }}>
+              <button onClick={() => handleExportExcel(true)} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem', color: 'var(--accent-success)', borderColor: 'rgba(16,185,129,0.3)' }}>
                 Excel (Theo bộ lọc)
               </button>
             </div>
           </div>
 
           {/* Import Section */}
-          <div style={{ background: 'var(--glass-bg)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
-            <h4 style={{ marginBottom: '0.75rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <div style={{ background: 'rgba(0, 0, 0, 0.05)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+            <h4 style={{ marginBottom: '0.75rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <Upload size={18} /> Nhập Dữ Liệu
             </h4>
             
@@ -208,17 +255,17 @@ const DataModal = ({
               className="input-field"
               value={importMode}
               onChange={(e) => setImportMode(e.target.value)}
-              style={{ marginBottom: '0.75rem' }}
+              style={{ marginBottom: '0.75rem', fontSize: '0.85rem' }}
             >
-              <option value="merge">Gộp (merge) — giữ tiến độ cũ</option>
-              <option value="replace">Ghi đè toàn bộ dữ liệu</option>
+              <option value="merge" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Gộp (merge) — giữ tiến độ cũ</option>
+              <option value="replace" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Ghi đè toàn bộ dữ liệu</option>
             </select>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-              <button onClick={() => fileInputRef.current.click()} className="btn btn-outline" style={{ justifyContent: 'center' }}>
+              <button onClick={() => fileInputRef.current.click()} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem' }}>
                 <Upload size={16} /> Import JSON
               </button>
-              <button onClick={() => excelInputRef.current.click()} className="btn btn-outline" style={{ justifyContent: 'center', color: 'var(--accent-success)', borderColor: 'rgba(16,185,129,0.3)' }}>
+              <button onClick={() => excelInputRef.current.click()} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem', color: 'var(--accent-success)', borderColor: 'rgba(16,185,129,0.3)' }}>
                 <FileSpreadsheet size={16} /> Import Excel
               </button>
             </div>
