@@ -21,18 +21,20 @@ import {
 } from 'lucide-react';
 
 const WORD_HEADERS = ['word', 'từ', 'từ vựng', 'vocab', 'term'];
-const VI_MEANING_HEADERS = ['vietnamese', 'vi', 'vimeaning', 'nghĩa tiếng việt', 'tiếng việt', 'nghĩa vi', 'dịch nghĩa', 'nghĩa'];
-const MEANING_HEADERS = ['meaning', 'english', 'definition', 'định nghĩa', 'nghĩa tiếng anh', 'english meaning', 'def'];
+const VI_MEANING_HEADERS = ['vietnamese', 'vi', 'vimeaning', 'nghĩa tiếng việt', 'tiếng việt', 'nghĩa vi', 'dịch nghĩa', 'nghĩa', 'meaning (vi)'];
+const MEANING_HEADERS = ['meaning', 'english', 'definition', 'định nghĩa', 'nghĩa tiếng anh', 'english meaning', 'def', 'meaning (en)'];
 const PHONETIC_HEADERS = ['phonetic', 'pronunciation', 'phiên âm', 'phát âm', 'ipa'];
 const EXAMPLE_HEADERS = ['example', 'sentence', 'ví dụ', 'câu ví dụ', 'câu'];
+const TAG_HEADERS = ['tags', 'tag', 'chủ đề'];
+const TYPE_HEADERS = ['type', 'word type', 'từ loại', 'loại từ'];
 
-const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
+const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTab }) => {
   const [parsedWords, setParsedWords] = useState([]);
   const [selectedWordIds, setSelectedWordIds] = useState(new Set());
   const [isDragOver, setIsDragOver] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [autoFetch, setAutoFetch] = useState(true);
-  const [skipDuplicates, setSkipDuplicates] = useState(true);
+  const [updateDuplicates, setUpdateDuplicates] = useState(true);
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -49,7 +51,7 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
   // Reset page to 1 when filters or search terms change to prevent empty renders
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, autoFetch, skipDuplicates, parsedWords.length]);
+  }, [searchTerm, autoFetch, updateDuplicates, parsedWords.length]);
 
   // Helper APIs from AddWord
   const translateToVi = async (text) => {
@@ -161,6 +163,8 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
         let viIdx = -1;
         let enIdx = -1;
         let exampleIdx = -1;
+        let tagIdx = -1;
+        let typeIdx = -1;
 
         headers.forEach((header, index) => {
           if (WORD_HEADERS.includes(header)) wordIdx = index;
@@ -168,6 +172,8 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
           else if (VI_MEANING_HEADERS.includes(header)) viIdx = index;
           else if (MEANING_HEADERS.includes(header)) enIdx = index;
           else if (EXAMPLE_HEADERS.includes(header)) exampleIdx = index;
+          else if (TAG_HEADERS.includes(header)) tagIdx = index;
+          else if (TYPE_HEADERS.includes(header)) typeIdx = index;
         });
 
         // Fallback to positional mapping if Word column is not detected
@@ -193,6 +199,8 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
           const rawVi = viIdx !== -1 && row[viIdx] ? String(row[viIdx]).trim() : '';
           const rawEn = enIdx !== -1 && row[enIdx] ? String(row[enIdx]).trim() : '';
           const rawExample = exampleIdx !== -1 && row[exampleIdx] ? String(row[exampleIdx]).trim() : '';
+          const rawTags = tagIdx !== -1 && row[tagIdx] ? String(row[tagIdx]).split(',').map(t => t.trim()).filter(Boolean) : [];
+          const rawType = typeIdx !== -1 && row[typeIdx] ? String(row[typeIdx]).trim() : '';
 
           // Check if duplicate in existing vocab library
           const isDuplicate = words.some(existing => 
@@ -208,13 +216,13 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
             viMeaning: rawVi,
             meaning: rawEn,
             example: rawExample,
+            tags: rawTags,
+            wordType: rawType,
             isDuplicate
           });
 
-          // Pre-select words that are not duplicates
-          if (!isDuplicate) {
-            initialSelected.add(id);
-          }
+          // Pre-select words
+          initialSelected.add(id);
         }
 
         if (items.length === 0) {
@@ -305,9 +313,10 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
     
     let addedCount = 0;
     let duplicateSkipped = 0;
+    let updatedCount = 0;
     
     // Keep track of words added during this execution to prevent duplicates due to React closure scope
-    const addedDuringThisImport = new Set();
+    const addedDuringThisImport = new Map();
     
     for (let i = 0; i < toImport.length; i++) {
       const currentItem = toImport[i];
@@ -315,11 +324,13 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
 
       // Final check for duplicates against the live library and words added in this batch
       const isAlreadyAdded = addedDuringThisImport.has(currentItem.word.trim().toLowerCase());
-      const isLiveDuplicate = words.some(existing => 
+      const liveDuplicateObj = words.find(existing => 
         existing.word.trim().toLowerCase() === currentItem.word.toLowerCase()
-      ) || isAlreadyAdded;
+      );
+      
+      const isLiveDuplicate = Boolean(liveDuplicateObj) || isAlreadyAdded;
 
-      if (isLiveDuplicate && skipDuplicates) {
+      if (isLiveDuplicate && !updateDuplicates) {
         duplicateSkipped++;
         continue;
       }
@@ -328,9 +339,11 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
       let finalViMeaning = currentItem.viMeaning;
       let finalPhonetic = currentItem.phonetic;
       let finalExample = currentItem.example;
+      let finalTags = currentItem.tags;
+      let finalType = currentItem.wordType;
 
       // Auto-fetch if enabled and fields are missing
-      if (autoFetch) {
+      if (autoFetch && (!isLiveDuplicate || updateDuplicates)) {
         let isFetchingNeeded = !finalMeaning || !finalViMeaning || !finalPhonetic;
         
         if (isFetchingNeeded) {
@@ -349,21 +362,44 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
         }
       }
 
-      const newWordObj = {
-        id: uuidv4(),
-        word: currentItem.word,
-        phonetic: finalPhonetic,
-        meaning: finalMeaning,
-        viMeaning: finalViMeaning,
-        example: finalExample,
-        ...getInitialSRSData(),
-        dateAdded: new Date().getTime()
-      };
+      if (isLiveDuplicate && updateDuplicates) {
+        // Merge with existing
+        const existingWord = isAlreadyAdded 
+          ? addedDuringThisImport.get(currentItem.word.trim().toLowerCase())
+          : liveDuplicateObj;
+          
+        const updatedWordObj = {
+          ...existingWord,
+          phonetic: finalPhonetic || existingWord.phonetic,
+          meaning: finalMeaning || existingWord.meaning,
+          viMeaning: finalViMeaning || existingWord.viMeaning,
+          example: finalExample || existingWord.example,
+          tags: (finalTags && finalTags.length > 0) ? finalTags : existingWord.tags,
+          wordType: finalType || existingWord.wordType,
+        };
+        
+        if (onUpdateWord) onUpdateWord(updatedWordObj);
+        addedDuringThisImport.set(currentItem.word.trim().toLowerCase(), updatedWordObj);
+        updatedCount++;
+      } else {
+        const newWordObj = {
+          id: uuidv4(),
+          word: currentItem.word,
+          phonetic: finalPhonetic,
+          meaning: finalMeaning,
+          viMeaning: finalViMeaning,
+          example: finalExample,
+          tags: finalTags,
+          wordType: finalType,
+          ...getInitialSRSData(),
+          dateAdded: new Date().getTime()
+        };
 
-      // Add to system immediately
-      onAdd(newWordObj);
-      addedDuringThisImport.add(currentItem.word.trim().toLowerCase());
-      addedCount++;
+        // Add to system immediately
+        onAdd(newWordObj);
+        addedDuringThisImport.set(currentItem.word.trim().toLowerCase(), newWordObj);
+        addedCount++;
+      }
 
       // Small delay between words if fetching APIs to respect rate limits
       if (autoFetch && i < toImport.length - 1) {
@@ -375,7 +411,8 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
     setImportSummary({
       total: toImport.length,
       added: addedCount,
-      skipped: duplicateSkipped
+      skipped: duplicateSkipped,
+      updated: updatedCount
     });
     setParsedWords([]);
     setSelectedWordIds(new Set());
@@ -515,6 +552,11 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
             <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>
               Đã thêm thành công <strong style={{ color: 'var(--accent-success)' }}>{importSummary.added}</strong> từ vựng mới vào thư viện.
             </p>
+            {importSummary.updated > 0 && (
+              <p style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                Đã cập nhật dữ liệu cho <strong style={{ color: 'var(--accent-secondary)' }}>{importSummary.updated}</strong> từ vựng đã tồn tại.
+              </p>
+            )}
             {importSummary.skipped > 0 && (
               <p className="text-muted" style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
                 Đã bỏ qua <strong>{importSummary.skipped}</strong> từ bị trùng lặp.
@@ -555,11 +597,11 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', cursor: 'pointer' }}>
                 <input 
                   type="checkbox" 
-                  checked={skipDuplicates} 
-                  onChange={e => setSkipDuplicates(e.target.checked)} 
+                  checked={updateDuplicates} 
+                  onChange={e => setUpdateDuplicates(e.target.checked)} 
                   style={{ cursor: 'pointer' }}
                 />
-                Bỏ qua từ trùng
+                Cập nhật nếu từ đã tồn tại
               </label>
 
               <div style={{ position: 'relative', width: '160px' }}>
@@ -674,12 +716,13 @@ const ImportExcelCSV = ({ words = [], onAdd, onAddWords, onCloseTab }) => {
                         gap: '0.25rem',
                         fontSize: '0.7rem', 
                         fontWeight: 600,
-                        color: 'var(--accent-warning)', 
-                        background: 'rgba(245,158,11,0.08)', 
+                        color: updateDuplicates ? 'var(--accent-secondary)' : 'var(--text-muted)', 
+                        background: updateDuplicates ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255, 255, 255, 0.05)', 
                         padding: '0.15rem 0.45rem', 
                         borderRadius: '999px' 
                       }}>
-                        <AlertTriangle size={10} /> Đã có sẵn
+                        {updateDuplicates ? <CheckCircle size={10} /> : <AlertTriangle size={10} />}
+                        {updateDuplicates ? 'Sẽ cập nhật' : 'Bỏ qua'}
                       </span>
                     ) : (
                       <span style={{ 

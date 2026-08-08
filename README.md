@@ -63,6 +63,18 @@ public/
 
 ## 4. Các task đã làm
 
+### [2026-08-08] Fix Excel Import Logic & Headers Mapping `(FAST)`
+- **Lane / Mode:** FEATURE FAST
+- **Tóm tắt:** Fix lỗi Import Excel không update từ đã có và bổ sung header detection (`Meaning (EN/VI)`, `Type`, `Tags`) khớp chuẩn DataModal.
+- **Thay đổi chính:**
+  - Sửa `ImportExcelCSV.jsx`: Hỗ trợ thêm các headers từ DataModal export.
+  - Sửa logic xử lý trùng lặp: Đổi `skipDuplicates` thành `updateDuplicates` (mặc định bật) để tự động merge field cũ và mới.
+  - Sửa UI `ImportExcelCSV.jsx`: Thêm hiển thị trạng thái "Sẽ cập nhật".
+  - Truyền `onUpdateWord` từ `AddWord.jsx` xuống `ImportExcelCSV.jsx` để cập nhật state.
+- **Files / areas chạm:** `src/components/AddWord.jsx`, `src/components/ImportExcelCSV.jsx`
+- **Ảnh hưởng README:** §4
+- **Verify:** Chạy lệnh `npm run build` thành công.
+
 ### [2026-07-14] Performance + UX polish (giữ 2-grade) `(FULL)`
 - **Lane / Mode:** FEATURE FULL
 - **Tóm tắt:** Fix boot load, lazy bundle, UX học/thư viện/cài đặt, PWA, UI VI + theme + bottom nav; **không** đổi sang 4-grade.

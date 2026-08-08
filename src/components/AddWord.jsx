@@ -623,7 +623,7 @@ const AddWord = ({ words = [], settings, topics = [], addTopic, onUpdateWord, on
       )}
 
       {activeAddTab === 'upload' && (
-        <ImportExcelCSV words={words} onAdd={onAdd} onAddWords={onAddWords} onCloseTab={() => setActiveAddTab('manual')} />
+        <ImportExcelCSV words={words} onUpdateWord={onUpdateWord} onAdd={onAdd} onAddWords={onAddWords} onCloseTab={() => setActiveAddTab('manual')} />
       )}
 
       {activeAddTab === 'autotag' && (
