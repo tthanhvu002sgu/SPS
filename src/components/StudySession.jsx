@@ -14,6 +14,7 @@ import {
   Folder,
 } from 'lucide-react';
 import { processReview } from '../utils/srs';
+import { formatLineBreaks } from '../utils/formatText';
 import Dashboard from './Dashboard';
 
 const MarkdownText = ({ text }) => {
@@ -1422,7 +1423,7 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
                         lineHeight: 1.2,
                       }}
                     >
-                      {showReverse ? currentWord.viMeaning || currentWord.meaning : currentWord.word}
+                      {showReverse ? formatLineBreaks(currentWord.viMeaning || currentWord.meaning) : currentWord.word}
                     </h1>
                     {!showReverse && currentWord.phonetic && (
                       <p className="text-muted" style={{ fontSize: '1.1rem', fontFamily: 'monospace' }}>
@@ -1520,12 +1521,12 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
                     }}
                   />
                   {currentWord.viMeaning && (
-                    <p style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--accent-warning)', marginBottom: '0.25rem' }}>
-                      {currentWord.viMeaning}
+                    <p className="preserve-newlines" style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--accent-warning)', marginBottom: '0.25rem' }}>
+                      {formatLineBreaks(currentWord.viMeaning)}
                     </p>
                   )}
-                  <p className="word-meaning">{currentWord.meaning}</p>
-                  {currentWord.example && <p className="word-example">&ldquo;{currentWord.example}&rdquo;</p>}
+                  {currentWord.meaning && <p className="word-meaning preserve-newlines">{formatLineBreaks(currentWord.meaning)}</p>}
+                  {currentWord.example && <p className="word-example preserve-newlines">&ldquo;{formatLineBreaks(currentWord.example)}&rdquo;</p>}
                 </div>
               </div>
             </div>

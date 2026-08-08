@@ -519,12 +519,18 @@ p {
   font-weight: 600;
   color: var(--accent-primary);
   margin-bottom: 0.5rem;
+  white-space: pre-line;
 }
 
 .word-example {
   font-size: 0.9rem;
   font-style: italic;
   color: var(--text-muted);
+  white-space: pre-line;
+}
+
+.preserve-newlines {
+  white-space: pre-line;
 }
 
 /* Utility */

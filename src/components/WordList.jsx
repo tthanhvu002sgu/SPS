@@ -4,6 +4,7 @@ import AddWord from './AddWord';
 import FolderManagerModal from './FolderManagerModal';
 import DataModal from './DataModal';
 import { WORD_TYPES, isWordType, isStatusTag } from '../utils/tags';
+import { formatLineBreaks } from '../utils/formatText';
 
 const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, updateFolder, deleteFolder, updateWord, deleteWord, addWord, addWords, importData, importSnapshot, getFullSnapshotForBackup }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -537,6 +538,7 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
                       </div>
                       {word.viMeaning && (
                         <p
+                          className="preserve-newlines"
                           style={{
                             fontWeight: 600,
                             fontSize: '0.85rem',
@@ -544,13 +546,17 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
                             marginBottom: '0.1rem',
                           }}
                         >
-                          {word.viMeaning}
+                          {formatLineBreaks(word.viMeaning)}
                         </p>
                       )}
-                      <p style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>{word.meaning}</p>
+                      {word.meaning && (
+                        <p className="preserve-newlines" style={{ fontSize: '0.85rem', marginBottom: '0.2rem' }}>
+                          {formatLineBreaks(word.meaning)}
+                        </p>
+                      )}
                       {word.example && (
-                        <p className="text-muted" style={{ fontStyle: 'italic', fontSize: '0.8rem' }}>
-                          &ldquo;{word.example}&rdquo;
+                        <p className="preserve-newlines text-muted" style={{ fontStyle: 'italic', fontSize: '0.8rem' }}>
+                          &ldquo;{formatLineBreaks(word.example)}&rdquo;
                         </p>
                       )}
                     </div>
