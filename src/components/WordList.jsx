@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { Edit2, Trash2, Save, X, Search as SearchIcon, ChevronLeft, ChevronRight, Folder, Settings2 } from 'lucide-react';
 import AddWord from './AddWord';
 import FolderManagerModal from './FolderManagerModal';
-import { WORD_TYPES } from '../utils/tags';
+import { WORD_TYPES, isWordType, isStatusTag } from '../utils/tags';
 
 const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, updateFolder, deleteFolder, updateWord, deleteWord, addWord, addWords }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -21,7 +21,10 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
     words.forEach((w) => {
       (w.tags || []).forEach((t) => {
         if (t && typeof t === 'string' && t.trim()) {
-          set.add(t.trim());
+          const trimmed = t.trim();
+          if (!isWordType(trimmed) && !isStatusTag(trimmed)) {
+            set.add(trimmed);
+          }
         }
       });
     });
@@ -35,12 +38,20 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
   }, [availableTags, filterTag]);
 
   const availableTypes = useMemo(() => {
-    const set = new Set(WORD_TYPES);
+    const set = new Set();
     words.forEach((w) => {
-      if (w.wordType) set.add(w.wordType);
+      if (w.wordType && typeof w.wordType === 'string' && w.wordType.trim()) {
+        set.add(w.wordType.trim());
+      }
     });
-    return Array.from(set).filter(Boolean).sort();
+    return Array.from(set).sort();
   }, [words]);
+
+  useEffect(() => {
+    if (filterType && !availableTypes.includes(filterType)) {
+      setFilterType('');
+    }
+  }, [availableTypes, filterType]);
 
   const filteredWords = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();

@@ -1,7 +1,7 @@
 import axios from 'axios';
-import { WORD_TYPES, DEFAULT_TOPICS } from './tags';
+import { WORD_TYPES, MAIN_TOPICS, normalizeTag } from './tags';
 
-export const autoTagWords = async (wordsToTag, apiKey, topics = DEFAULT_TOPICS, model = 'gemini-2.5-flash-lite') => {
+export const autoTagWords = async (wordsToTag, apiKey, topics = MAIN_TOPICS, model = 'gemini-2.5-flash-lite') => {
   if (!apiKey) {
     throw new Error('Thiếu API Key của Gemini. Vui lòng cập nhật trong Settings.');
   }
@@ -13,8 +13,6 @@ export const autoTagWords = async (wordsToTag, apiKey, topics = DEFAULT_TOPICS, 
   // Tạo danh sách các từ vựng cần phân tích (để đưa vào prompt)
   const wordsContext = wordsList.map((w, idx) => `[${idx}] ${w.word}${w.meaning ? ` (nghĩa: ${w.meaning})` : ''}${w.viMeaning ? ` (tiếng Việt: ${w.viMeaning})` : ''}`).join('\n');
 
-  const activeTopics = (Array.isArray(topics) && topics.length > 0) ? topics : DEFAULT_TOPICS;
-
   const prompt = `
 Bạn là một chuyên gia ngôn ngữ học. Nhiệm vụ của bạn là phân loại các từ vựng sau đây vào đúng Từ Loại (wordType) và Chủ Đề (tags).
 
@@ -22,15 +20,10 @@ Bạn là một chuyên gia ngôn ngữ học. Nhiệm vụ của bạn là phâ
 1. **wordType**: CHỈ ĐƯỢC CHỌN 1 TRONG CÁC GIÁ TRỊ SAU:
 ${WORD_TYPES.map(t => `- "${t}"`).join('\n')}
 
-2. **tags**: Nếu có chủ đề phù hợp trong danh sách có sẵn dưới đây, hãy chọn tối đa 2 chủ đề và điền vào mảng \`tags\`. ĐỂ TRỐNG \`suggestedNewTag\`.
-Danh sách chủ đề có sẵn:
-${activeTopics.map(t => `- "${t}"`).join('\n')}
+2. **tags**: BẮT BUỘC CHỈ ĐƯỢC CHỌN TỐI ĐA 2 CHỦ ĐỀ TRONG ĐÚNG 12 CHỦ ĐỀ CHÍNH SAU ĐÂY:
+${MAIN_TOPICS.map(t => `- "${t}"`).join('\n')}
 
-3. **Đề xuất Tag mới (Rất Quan Trọng)**: Nếu KHÔNG CÓ chủ đề nào trong danh sách trên thực sự phù hợp (ví dụ: từ chuyên ngành hẹp, khái niệm mới), hãy:
-   - ĐỂ TRỐNG mảng \`tags\` ([]).
-   - Điền một chủ đề ngắn gọn mới vào \`suggestedNewTag\` (VD: "Tiền điện tử").
-   - Điền chủ đề có sẵn gần giống nhất vào \`bestExistingTag\` (VD: "Công nghệ").
-   - Giải thích lý do vào \`reasoning\`.
+KHÔNG TỰ TẠO TAG MỚI HOẶC SỬA TÊN TAG. ĐỂ TRỐNG \`suggestedNewTag\`, \`bestExistingTag\`, và \`reasoning\`.
 
 **Danh sách từ vựng cần phân tích:**
 ${wordsContext}
@@ -41,7 +34,7 @@ TRẢ VỀ DUY NHẤT MỘT MẢNG JSON HỢP LỆ (không dùng markdown codebl
   {
     "word": "từ vựng gốc",
     "wordType": "Danh từ",
-    "tags": ["Công nghệ"],
+    "tags": ["Công nghệ & truyền thông"],
     "suggestedNewTag": "",
     "bestExistingTag": "",
     "reasoning": ""
@@ -65,14 +58,17 @@ TRẢ VỀ DUY NHẤT MỘT MẢNG JSON HỢP LỆ (không dùng markdown codebl
 
     let textResponse = response.data.candidates[0].content.parts[0].text.trim();
     // Loại bỏ markdown JSON block nếu AI có trả về
-    if (textResponse.startsWith('\`\`\`json')) {
-      textResponse = textResponse.replace(/^\`\`\`json\n?/, '').replace(/\n?\`\`\`$/, '');
-    } else if (textResponse.startsWith('\`\`\`')) {
-      textResponse = textResponse.replace(/^\`\`\`\n?/, '').replace(/\n?\`\`\`$/, '');
+    if (textResponse.startsWith('```json')) {
+      textResponse = textResponse.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+    } else if (textResponse.startsWith('```')) {
+      textResponse = textResponse.replace(/^```\n?/, '').replace(/\n?```$/, '');
     }
 
     const parsedJson = JSON.parse(textResponse);
-    return parsedJson;
+    return (parsedJson || []).map(item => ({
+      ...item,
+      tags: (item.tags || []).map(t => normalizeTag(t)).filter(Boolean)
+    }));
 
   } catch (error) {
     console.error('Error auto-tagging words:', error);

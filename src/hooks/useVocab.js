@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { DEFAULT_TOPICS } from '../utils/tags';
+import { DEFAULT_TOPICS, normalizeWordTags } from '../utils/tags';
 
 const STORAGE_KEY = 'spacedrep_vocab_data';
 const SETTINGS_KEY = 'spacedrep_settings';
@@ -172,7 +172,8 @@ export const useVocab = () => {
     const storedHistory = safeParse(localStorage.getItem(HISTORY_KEY), {});
 
     const { words: dayResetWords, changed } = resetReviewedIfNewDay(storedWords);
-    const initialUsedTags = getUsedTags(dayResetWords);
+    const normalizedWords = dayResetWords.map((w) => normalizeWordTags(w));
+    const initialUsedTags = getUsedTags(normalizedWords);
     localStorage.setItem(TOPICS_KEY, JSON.stringify(initialUsedTags));
     
     if (!localStorage.getItem(FOLDERS_KEY)) {
@@ -203,16 +204,14 @@ export const useVocab = () => {
     setFolders(storedFolders);
     setSettings(storedSettings);
     setReviewHistory(initialHistory);
-    setWords(dayResetWords);
+    setWords(normalizedWords);
     setIsLoading(false);
     hydratedRef.current = true;
 
     // Apply theme ASAP
     document.documentElement.setAttribute('data-theme', storedSettings.theme || 'sepia');
 
-    if (changed) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(dayResetWords));
-    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedWords));
 
     // Daily full backup (local)
     const todayDateStr = new Date().toISOString().split('T')[0];
@@ -340,17 +339,17 @@ export const useVocab = () => {
   }, []);
 
   const addWord = useCallback((newWord) => {
-    setWords((prev) => [newWord, ...prev]);
+    setWords((prev) => [normalizeWordTags(newWord), ...prev]);
   }, []);
 
   const addWords = useCallback((newWords) => {
     if (Array.isArray(newWords) && newWords.length > 0) {
-      setWords((prev) => [...newWords, ...prev]);
+      setWords((prev) => [...newWords.map((w) => normalizeWordTags(w)), ...prev]);
     }
   }, []);
 
   const updateWord = useCallback((updatedWord) => {
-    setWords((prev) => prev.map((w) => (w.id === updatedWord.id ? updatedWord : w)));
+    setWords((prev) => prev.map((w) => (w.id === updatedWord.id ? normalizeWordTags(updatedWord) : w)));
   }, []);
 
   const deleteWord = useCallback((id) => {
@@ -368,8 +367,9 @@ export const useVocab = () => {
   /** Replace all words (legacy) */
   const importData = useCallback((importedWords) => {
     if (Array.isArray(importedWords)) {
-      setWords(importedWords);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(importedWords));
+      const normalized = importedWords.map((w) => normalizeWordTags(w));
+      setWords(normalized);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
     }
   }, []);
 
@@ -399,8 +399,10 @@ export const useVocab = () => {
       throw new Error('Định dạng file không hợp lệ.');
     }
 
+    const normalizedIncoming = incomingWords.map((w) => normalizeWordTags(w));
+
     if (mode === 'replace') {
-      setWords(incomingWords);
+      setWords(normalizedIncoming);
       if (incomingSettings) {
         setSettings((prev) => ({ ...DEFAULT_SETTINGS, ...prev, ...incomingSettings }));
       }
@@ -413,8 +415,8 @@ export const useVocab = () => {
         setReviewHistory(incomingHistory);
         localStorage.setItem(HISTORY_KEY, JSON.stringify(incomingHistory));
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(incomingWords));
-      return { added: incomingWords.length, updated: 0, total: incomingWords.length };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedIncoming));
+      return { added: normalizedIncoming.length, updated: 0, total: normalizedIncoming.length };
     }
 
     // merge by lowercase word text
@@ -422,12 +424,12 @@ export const useVocab = () => {
     let updated = 0;
     setWords((prev) => {
       const map = new Map(prev.map((w) => [w.word.trim().toLowerCase(), w]));
-      incomingWords.forEach((w) => {
+      normalizedIncoming.forEach((w) => {
         const key = (w.word || '').trim().toLowerCase();
         if (!key) return;
         if (map.has(key)) {
           const existing = map.get(key);
-          map.set(key, {
+          map.set(key, normalizeWordTags({
             ...existing,
             meaning: w.meaning || existing.meaning,
             viMeaning: w.viMeaning || existing.viMeaning,
@@ -435,7 +437,7 @@ export const useVocab = () => {
             example: w.example || existing.example,
             wordType: w.wordType || existing.wordType,
             tags: w.tags?.length ? w.tags : existing.tags,
-          });
+          }));
           updated += 1;
         } else {
           map.set(key, w);
