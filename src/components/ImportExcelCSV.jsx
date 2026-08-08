@@ -24,7 +24,7 @@ const WORD_HEADERS = ['word', 'từ', 'từ vựng', 'vocab', 'term'];
 const VI_MEANING_HEADERS = ['vietnamese', 'vi', 'vimeaning', 'nghĩa tiếng việt', 'tiếng việt', 'nghĩa vi', 'dịch nghĩa', 'nghĩa', 'meaning (vi)'];
 const MEANING_HEADERS = ['meaning', 'english', 'definition', 'định nghĩa', 'nghĩa tiếng anh', 'english meaning', 'def', 'meaning (en)'];
 const PHONETIC_HEADERS = ['phonetic', 'pronunciation', 'phiên âm', 'phát âm', 'ipa'];
-const EXAMPLE_HEADERS = ['example', 'sentence', 'ví dụ', 'câu ví dụ', 'câu'];
+const EXAMPLE_HEADERS = ['example', 'examples', 'example chunks', 'sentence', 'ví dụ', 'câu ví dụ', 'câu'];
 const TAG_HEADERS = ['tags', 'tag', 'chủ đề'];
 const TYPE_HEADERS = ['type', 'word type', 'từ loại', 'loại từ'];
 
