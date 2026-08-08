@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { X, Download, Upload, FileSpreadsheet } from 'lucide-react';
+import { X, Download, Upload, FileSpreadsheet, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -15,6 +15,7 @@ const DataModal = ({
   const [dataMessage, setDataMessage] = useState('');
   const fileInputRef = useRef(null);
   const excelInputRef = useRef(null);
+  const csvInputRef = useRef(null);
 
   const handleExportJSON = (useFiltered) => {
     const dataToExport = useFiltered ? filteredWords : (getFullSnapshotForBackup ? getFullSnapshotForBackup() : words);
@@ -49,6 +50,50 @@ const DataModal = ({
     XLSX.utils.book_append_sheet(wb, ws, 'Vocab');
     XLSX.writeFile(wb, `spacedrep_vocab_${new Date().toISOString().split('T')[0]}.xlsx`);
     setDataMessage('Đã xuất file Excel.');
+    setTimeout(() => setDataMessage(''), 3000);
+  };
+
+  const handleExportCSV = (useFiltered) => {
+    const dataToExport = useFiltered ? filteredWords : words;
+    if (dataToExport.length === 0) {
+      alert('Không có từ vựng nào để xuất.');
+      return;
+    }
+
+    const headers = ['Word', 'Phonetic', 'Type', 'Meaning (EN)', 'Meaning (VI)', 'Example', 'Tags'];
+    const rows = dataToExport.map((w) => [
+      w.word || '',
+      w.phonetic || '',
+      w.wordType || '',
+      w.meaning || '',
+      w.viMeaning || '',
+      w.example || '',
+      (w.tags || []).join(', '),
+    ]);
+
+    const formatCell = (val) => {
+      const stringVal = String(val ?? '');
+      if (stringVal.includes(',') || stringVal.includes('"') || stringVal.includes('\n')) {
+        return `"${stringVal.replace(/"/g, '""')}"`;
+      }
+      return stringVal;
+    };
+
+    const csvContent =
+      '\uFEFF' +
+      [headers, ...rows].map((row) => row.map(formatCell).join(',')).join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `spacedrep_vocab_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setDataMessage('Đã xuất file CSV thành công.');
     setTimeout(() => setDataMessage(''), 3000);
   };
 
@@ -171,6 +216,86 @@ const DataModal = ({
     e.target.value = null;
   };
 
+  const handleImportCSV = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        const importedWords = jsonData
+          .map((row) => {
+            const getVal = (keys) => {
+              for (const k of Object.keys(row)) {
+                if (keys.includes(String(k).toLowerCase().trim())) {
+                  return row[k];
+                }
+              }
+              return '';
+            };
+
+            return {
+              id: uuidv4(),
+              word: String(getVal(['word', 'từ', 'từ vựng', 'vocab', 'term'])).trim(),
+              phonetic: String(getVal(['phonetic', 'phiên âm', 'pronunciation', 'phát âm', 'ipa'])).trim(),
+              wordType: String(getVal(['type', 'word type', 'từ loại', 'loại từ'])).trim(),
+              meaning: String(getVal(['meaning (en)', 'meaning', 'english', 'definition', 'định nghĩa', 'nghĩa tiếng anh'])).trim(),
+              viMeaning: String(getVal(['meaning (vi)', 'vietnamese', 'vi', 'vimeaning', 'nghĩa tiếng việt', 'tiếng việt', 'nghĩa vi', 'dịch nghĩa', 'nghĩa'])).trim(),
+              example: String(getVal(['example', 'examples', 'example chunks', 'ví dụ', 'câu ví dụ', 'sentence'])).trim(),
+              tags: getVal(['tags', 'tag', 'chủ đề'])
+                ? String(getVal(['tags', 'tag', 'chủ đề']))
+                    .split(',')
+                    .map((t) => t.trim())
+                    .filter(Boolean)
+                : [],
+              repetition: 0,
+              interval: 1,
+              ease: 2.5,
+              nextReviewDate: new Date().setHours(0, 0, 0, 0),
+            };
+          })
+          .filter((w) => w.word !== '');
+
+        if (importedWords.length === 0) {
+          alert('Không tìm thấy từ vựng nào hợp lệ trong file CSV.');
+          return;
+        }
+
+        const label = importMode === 'replace'
+          ? 'GHI ĐÈ toàn bộ dữ liệu hiện tại'
+          : 'GỘP (merge) vào dữ liệu hiện tại';
+
+        if (!window.confirm(`Import ${importedWords.length} từ từ CSV — chế độ: ${label}.\n\nTiếp tục?`)) {
+          return;
+        }
+
+        if (importSnapshot) {
+          const result = importSnapshot(importedWords, importMode);
+          setDataMessage(
+            importMode === 'replace'
+              ? `Đã thay thế bằng ${result.total} từ từ CSV.`
+              : `Đã gộp từ CSV: +${result.added} mới, cập nhật ${result.updated}.`
+          );
+        } else if (importData) {
+          importData(importedWords);
+          setDataMessage('Đã import CSV thành công.');
+        }
+      } catch (error) {
+        console.error('CSV import error:', error);
+        alert('Lỗi đọc file CSV. Vui lòng kiểm tra lại định dạng tệp.');
+      }
+      setTimeout(() => setDataMessage(''), 4000);
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = null;
+  };
+
   return (
     <div
       style={{
@@ -243,12 +368,20 @@ const DataModal = ({
                 JSON (Theo bộ lọc)
               </button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <button onClick={() => handleExportExcel(false)} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem', color: 'var(--accent-success)', borderColor: 'rgba(16,185,129,0.3)' }}>
                 Excel (Tất cả)
               </button>
               <button onClick={() => handleExportExcel(true)} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem', color: 'var(--accent-success)', borderColor: 'rgba(16,185,129,0.3)' }}>
                 Excel (Theo bộ lọc)
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+              <button onClick={() => handleExportCSV(false)} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem', color: 'var(--accent-warning, #f59e0b)', borderColor: 'rgba(245,158,11,0.3)' }}>
+                <FileText size={15} /> CSV (Tất cả)
+              </button>
+              <button onClick={() => handleExportCSV(true)} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem', color: 'var(--accent-warning, #f59e0b)', borderColor: 'rgba(245,158,11,0.3)' }}>
+                <FileText size={15} /> CSV (Bộ lọc)
               </button>
             </div>
           </div>
@@ -272,17 +405,21 @@ const DataModal = ({
               <option value="replace" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Ghi đè toàn bộ dữ liệu</option>
             </select>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-              <button onClick={() => fileInputRef.current.click()} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem' }}>
-                <Upload size={16} /> Import JSON
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+              <button onClick={() => fileInputRef.current.click()} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem', padding: '0.5rem 0.25rem' }}>
+                <Upload size={15} /> JSON
               </button>
-              <button onClick={() => excelInputRef.current.click()} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem', color: 'var(--accent-success)', borderColor: 'rgba(16,185,129,0.3)' }}>
-                <FileSpreadsheet size={16} /> Import Excel
+              <button onClick={() => excelInputRef.current.click()} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem', color: 'var(--accent-success)', borderColor: 'rgba(16,185,129,0.3)', padding: '0.5rem 0.25rem' }}>
+                <FileSpreadsheet size={15} /> Excel
+              </button>
+              <button onClick={() => csvInputRef.current.click()} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem', color: 'var(--accent-warning, #f59e0b)', borderColor: 'rgba(245,158,11,0.3)', padding: '0.5rem 0.25rem' }}>
+                <FileText size={15} /> CSV
               </button>
             </div>
 
             <input type="file" ref={fileInputRef} onChange={handleImportJSON} accept=".json" style={{ display: 'none' }} />
-            <input type="file" ref={excelInputRef} onChange={handleImportExcel} accept=".xlsx, .xls, .csv" style={{ display: 'none' }} />
+            <input type="file" ref={excelInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" style={{ display: 'none' }} />
+            <input type="file" ref={csvInputRef} onChange={handleImportCSV} accept=".csv" style={{ display: 'none' }} />
           </div>
 
           {dataMessage && (
