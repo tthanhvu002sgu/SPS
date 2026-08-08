@@ -10,6 +10,13 @@ const BACKUP_KEY = 'spacedrep_vocab_backup';
 const BACKUP_DATE_KEY = 'spacedrep_last_backup_date';
 const FULL_BACKUP_KEY = 'spacedrep_full_backup';
 
+const DEFAULT_SMART_FOLDERS = [
+  { id: 'folder_smart_life', name: 'Đời sống & Giao tiếp', isDefault: false, wordIds: [], tags: ['Đời sống & giao tiếp'] },
+  { id: 'folder_smart_work', name: 'Công việc & Kinh doanh', isDefault: false, wordIds: [], tags: ['Công việc & kinh doanh'] },
+  { id: 'folder_smart_study', name: 'Học tập & Học thuật', isDefault: false, wordIds: [], tags: ['Học tập & học thuật'] },
+  { id: 'folder_smart_tech', name: 'Công nghệ & Truyền thông', isDefault: false, wordIds: [], tags: ['Công nghệ & truyền thông'] },
+];
+
 const DEFAULT_SETTINGS = {
   dailyLimit: 20,
   intervalMultiplier: 1,
@@ -168,7 +175,7 @@ export const useVocab = () => {
       ...DEFAULT_SETTINGS,
       ...safeParse(localStorage.getItem(SETTINGS_KEY), {}),
     };
-    const storedFolders = safeParse(localStorage.getItem(FOLDERS_KEY), [{ id: 'default', name: 'Default', isDefault: true, wordIds: [], tags: [] }]);
+    const storedFoldersRaw = safeParse(localStorage.getItem(FOLDERS_KEY), null);
     const storedHistory = safeParse(localStorage.getItem(HISTORY_KEY), {});
 
     const { words: dayResetWords, changed } = resetReviewedIfNewDay(storedWords);
@@ -176,8 +183,25 @@ export const useVocab = () => {
     const initialUsedTags = getUsedTags(normalizedWords);
     localStorage.setItem(TOPICS_KEY, JSON.stringify(initialUsedTags));
     
-    if (!localStorage.getItem(FOLDERS_KEY)) {
+    let storedFolders = [];
+    const baseDefault = { id: 'default', name: 'Default', isDefault: true, wordIds: [], tags: [] };
+    
+    if (!storedFoldersRaw) {
+      storedFolders = [baseDefault, ...DEFAULT_SMART_FOLDERS];
       localStorage.setItem(FOLDERS_KEY, JSON.stringify(storedFolders));
+    } else {
+      storedFolders = [...storedFoldersRaw];
+      let hasChanges = false;
+      DEFAULT_SMART_FOLDERS.forEach(smartFolder => {
+        const exists = storedFolders.some(f => f.id === smartFolder.id || (f.tags || []).includes(smartFolder.tags[0]));
+        if (!exists) {
+          storedFolders.push(smartFolder);
+          hasChanges = true;
+        }
+      });
+      if (hasChanges) {
+        localStorage.setItem(FOLDERS_KEY, JSON.stringify(storedFolders));
+      }
     }
 
     let initialHistory = storedHistory;
