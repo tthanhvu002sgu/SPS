@@ -63,6 +63,15 @@ public/
 
 ## 4. Các task đã làm
 
+### [2026-08-08] Fix DataModal Excel Import Headers `(FAST)`
+- **Lane / Mode:** FEATURE FAST
+- **Tóm tắt:** Sửa lỗi tính năng Import "Ghi đè" trong Settings không nhận diện được các tên cột tuỳ biến.
+- **Thay đổi chính:**
+  - Cập nhật `DataModal.jsx`: Sử dụng chung logic parse tên cột linh hoạt (hỗ trợ `Example chunks`, `Meaning (EN)`, `Type`, `Tags`...) tương tự như giao diện nhập thêm từ mới.
+- **Files / areas chạm:** `src/components/DataModal.jsx`
+- **Ảnh hưởng README:** §4
+- **Verify:** Chạy lệnh `npm run build` thành công.
+
 ### [2026-08-08] Fix Excel Import Logic & Headers Mapping `(FAST)`
 - **Lane / Mode:** FEATURE FAST
 - **Tóm tắt:** Fix lỗi Import Excel không update từ đã có và bổ sung header detection (`Meaning (EN/VI)`, `Type`, `Tags`) khớp chuẩn DataModal.
