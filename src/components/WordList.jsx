@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Edit2, Trash2, Save, X, Search as SearchIcon, ChevronLeft, ChevronRight, Folder, Settings2 } from 'lucide-react';
+import { Edit2, Trash2, Save, X, Search as SearchIcon, ChevronLeft, ChevronRight, Folder, Settings2, Filter, Tag } from 'lucide-react';
 import AddWord from './AddWord';
 import FolderManagerModal from './FolderManagerModal';
 import { WORD_TYPES, isWordType, isStatusTag } from '../utils/tags';
@@ -236,70 +236,120 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
           </div>
         </div>
 
-        <div className="filter-chips">
-          <button
-            type="button"
-            className={`chip ${filterStatus === '' && !filterTag && !filterType ? 'chip-active' : ''}`}
-            onClick={resetFilters}
-          >
-            Tất cả
-          </button>
-          <button
-            type="button"
-            className={`chip ${filterStatus === 'due' ? 'chip-active' : ''}`}
-            onClick={() => {
-              setFilterStatus(filterStatus === 'due' ? '' : 'due');
-              setCurrentPage(1);
-            }}
-          >
-            Đến hạn
-          </button>
-          <button
-            type="button"
-            className={`chip ${filterStatus === 'new' ? 'chip-active' : ''}`}
-            onClick={() => {
-              setFilterStatus(filterStatus === 'new' ? '' : 'new');
-              setCurrentPage(1);
-            }}
-          >
-            Chưa học
-          </button>
-          <button
-            type="button"
-            className={`chip ${filterStatus === 'mastered' ? 'chip-active' : ''}`}
-            onClick={() => {
-              setFilterStatus(filterStatus === 'mastered' ? '' : 'mastered');
-              setCurrentPage(1);
-            }}
-          >
-            Thành thạo
-          </button>
-          {availableTypes.map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={`chip ${filterType === t ? 'chip-active' : ''}`}
-              onClick={() => {
-                setFilterType(filterType === t ? '' : t);
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.5rem',
+          background: 'var(--glass-bg)',
+          padding: '0.6rem 0.8rem',
+          borderRadius: '12px',
+          border: '1px solid var(--glass-border)',
+        }}>
+          {/* Status & Word Type Filters */}
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.85rem' }}>
+            <span style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <Filter size={14} /> Bộ lọc:
+            </span>
+
+            {/* Status Filter Dropdown */}
+            <select
+              value={filterStatus}
+              onChange={(e) => {
+                setFilterStatus(e.target.value);
                 setCurrentPage(1);
               }}
-            >
-              {t}
-            </button>
-          ))}
-          {availableTags.slice(0, 12).map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={`chip ${filterTag === t ? 'chip-active' : ''}`}
-              onClick={() => {
-                setFilterTag(filterTag === t ? '' : t);
-                setCurrentPage(1);
+              className="input-field"
+              style={{
+                padding: '0.3rem 0.75rem',
+                fontSize: '0.8rem',
+                width: 'auto',
+                minHeight: 'auto',
+                borderRadius: '8px',
+                background: filterStatus ? 'rgba(59, 130, 246, 0.15)' : 'rgba(0, 0, 0, 0.05)',
+                borderColor: filterStatus ? 'var(--accent-secondary)' : 'var(--glass-border)',
+                color: filterStatus ? 'var(--accent-secondary)' : 'var(--text-main)',
+                fontWeight: filterStatus ? 600 : 400,
+                cursor: 'pointer',
               }}
             >
-              #{t}
-            </button>
-          ))}
+              <option value="" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Trạng thái: Tất cả</option>
+              <option value="due" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Đến hạn ôn tập</option>
+              <option value="new" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Chưa học (mới)</option>
+              <option value="mastered" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Thành thạo (SRS ≥ 3)</option>
+            </select>
+
+            {/* Word Type Filter Dropdown */}
+            <select
+              value={filterType}
+              onChange={(e) => {
+                setFilterType(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="input-field"
+              style={{
+                padding: '0.3rem 0.75rem',
+                fontSize: '0.8rem',
+                width: 'auto',
+                minHeight: 'auto',
+                borderRadius: '8px',
+                background: filterType ? 'rgba(59, 130, 246, 0.15)' : 'rgba(0, 0, 0, 0.05)',
+                borderColor: filterType ? 'var(--accent-secondary)' : 'var(--glass-border)',
+                color: filterType ? 'var(--accent-secondary)' : 'var(--text-main)',
+                fontWeight: filterType ? 600 : 400,
+                cursor: 'pointer',
+              }}
+            >
+              <option value="" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Từ loại: Tất cả</option>
+              {availableTypes.map((t) => (
+                <option key={t} value={t} style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>{t}</option>
+              ))}
+            </select>
+
+            {(filterStatus || filterType || filterTag || searchTerm) && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="btn btn-outline"
+                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', borderRadius: '6px', marginLeft: 'auto' }}
+              >
+                <X size={12} /> Đặt lại
+              </button>
+            )}
+          </div>
+
+          {/* Topic Tags Row */}
+          {availableTags.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.35rem', paddingTop: '0.4rem', borderTop: '1px dashed var(--glass-border)' }}>
+              <span style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.75rem', marginRight: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                <Tag size={12} /> Chủ đề:
+              </span>
+              <button
+                type="button"
+                className={`chip ${!filterTag ? 'chip-active' : ''}`}
+                onClick={() => {
+                  setFilterTag('');
+                  setCurrentPage(1);
+                }}
+                style={{ fontSize: '0.75rem', padding: '0.2rem 0.55rem' }}
+              >
+                Tất cả chủ đề
+              </button>
+              {availableTags.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={`chip ${filterTag === t ? 'chip-active' : ''}`}
+                  onClick={() => {
+                    setFilterTag(filterTag === t ? '' : t);
+                    setCurrentPage(1);
+                  }}
+                  style={{ fontSize: '0.75rem', padding: '0.2rem 0.55rem' }}
+                >
+                  #{t}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div
