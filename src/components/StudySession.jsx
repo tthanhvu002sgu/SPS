@@ -187,12 +187,21 @@ const StudySession = ({
     }
   }, [currentWord, randomFrontBack]);
 
+const shuffleArray = (arr) => {
+  const result = [...arr];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+};
+
   const finishFlashcards = useCallback(
     (finalReviewed) => {
       const enableSentence = settings.enableSentencePractice !== false && !skipSentenceThisSession;
-      let toPractice = finalReviewed
-        .filter((v, i, a) => a.findIndex((t) => t.id === v.id) === i)
-        .sort(() => 0.5 - Math.random());
+      let toPractice = shuffleArray(
+        finalReviewed.filter((v, i, a) => a.findIndex((t) => t.id === v.id) === i)
+      );
 
       const maxN = Number(settings.maxSentenceWords);
       if (Number.isFinite(maxN) && maxN > 0) {
@@ -216,14 +225,31 @@ const StudySession = ({
   const handleStartStudy = () => {
     let list;
     if (practiceMode) {
-      list = [...filteredPool].sort(() => 0.5 - Math.random());
+      list = shuffleArray(filteredPool);
     } else {
       const today = new Date().setHours(0, 0, 0, 0);
       const reviewedCount = filteredPool.filter((w) => w.isReviewedToday).length;
       const remainingQuota = Math.max(0, settings.dailyLimit - reviewedCount);
       let dueWords = filteredPool.filter((w) => w.nextReviewDate <= today && !w.isReviewedToday);
-      dueWords.sort((a, b) => a.nextReviewDate - b.nextReviewDate);
-      list = dueWords.slice(0, remainingQuota);
+      
+      // Group dueWords by nextReviewDate to maintain SRS priority (overdue first)
+      // while shuffling words that share the same review date (e.g. newly added words)
+      const groupsMap = new Map();
+      dueWords.forEach((w) => {
+        const dateKey = w.nextReviewDate || 0;
+        if (!groupsMap.has(dateKey)) {
+          groupsMap.set(dateKey, []);
+        }
+        groupsMap.get(dateKey).push(w);
+      });
+
+      const sortedKeys = Array.from(groupsMap.keys()).sort((a, b) => a - b);
+      let prioritizedShuffled = [];
+      sortedKeys.forEach((key) => {
+        prioritizedShuffled = prioritizedShuffled.concat(shuffleArray(groupsMap.get(key)));
+      });
+
+      list = prioritizedShuffled.slice(0, remainingQuota);
     }
 
     setQueue(list);

@@ -17,7 +17,7 @@ npm run deploy   # gh-pages (base: /SPS/)
 
 ## 1. Tổng quan tính năng
 
-- **Học SRS**: hàng đợi từ đến hạn, giới hạn daily, 2 mức chấm (Quên / Dễ).
+- **Học SRS**: hàng đợi từ đến hạn (ưu tiên quá hạn & xáo trộn ngẫu nhiên từ cùng hạn ôn), giới hạn daily, 2 mức chấm (Quên / Dễ).
 - **Luyện tự do**: ôn không ảnh hưởng lịch SRS.
 - **Lọc tag** khi bắt đầu phiên; **xáo mặt thẻ** Anh ↔ Việt.
 - **Bài đặt câu** sau flashcard (bật/tắt, giới hạn số từ, bỏ qua trong phiên).
@@ -62,6 +62,17 @@ public/
 | `Dashboard` | Streak, mastered, accuracy 7 ngày |
 
 ## 4. Các task đã làm
+
+### [2026-08-11] Prioritized Randomization for Study Session Queue `(FAST)`
+- **Lane / Mode:** FEATURE FAST
+- **Tóm tắt:** Xáo trộn ngẫu nhiên thứ tự từ vựng cùng mốc hạn ôn trong phiên học SRS và xáo trộn trước khi cắt quota Daily Limit.
+- **Thay đổi chính:**
+  - Bổ sung hàm helper `shuffleArray` chuẩn Fisher-Yates trong `StudySession.jsx`.
+  - Cập nhật `handleStartStudy`: Gom nhóm các từ đến hạn theo `nextReviewDate`, đảo ngẫu nhiên các từ trong cùng mốc hạn ôn trước khi ghép lại và áp dụng `dailyLimit`.
+  - Thay thế ngẫu nhiên bằng `shuffleArray` cho cả chế độ Luyện tự do và bài tập Đặt câu.
+- **Files / areas chạm:** `src/components/StudySession.jsx`, `README.md`
+- **Ảnh hưởng README:** §1, §4
+- **Verify:** Chạy lệnh `npm run build` thành công.
 
 ### [2026-08-08] Fix DataModal Excel Import Headers `(FAST)`
 - **Lane / Mode:** FEATURE FAST
