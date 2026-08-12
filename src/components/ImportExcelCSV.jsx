@@ -27,6 +27,11 @@ const PHONETIC_HEADERS = ['phonetic', 'pronunciation', 'phiên âm', 'phát âm'
 const EXAMPLE_HEADERS = ['example', 'examples', 'example chunks', 'sentence', 'ví dụ', 'câu ví dụ', 'câu'];
 const TAG_HEADERS = ['tags', 'tag', 'chủ đề'];
 const TYPE_HEADERS = ['type', 'word type', 'từ loại', 'loại từ'];
+const REP_HEADERS = ['repetition', 'số lần ôn', 'rep', 'lần ôn', 'srs', 'srs status', 'srs stage', 'srs level', 'srs count', 'srs repetition'];
+const INTERVAL_HEADERS = ['interval (days)', 'interval', 'khoảng cách', 'khoảng cách ôn'];
+const EFACTOR_HEADERS = ['e-factor', 'efactor', 'ease', 'hệ số dễ', 'ef'];
+const NEXT_REVIEW_HEADERS = ['next review date', 'nextreviewdate', 'ngày ôn tiếp theo', 'ngày ôn'];
+const LAST_REVIEW_HEADERS = ['last reviewed', 'lastreviewed', 'lần ôn cuối', 'ngày ôn cuối'];
 
 const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTab }) => {
   const [parsedWords, setParsedWords] = useState([]);
@@ -102,11 +107,11 @@ const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTa
 
   // Download sample CSV template with UTF-8 BOM
   const handleDownloadTemplate = () => {
-    const headers = ['Word', 'Phonetic', 'Vietnamese Meaning', 'English Definition', 'Example'];
+    const headers = ['Word', 'Phonetic', 'Vietnamese Meaning', 'English Definition', 'Example', 'Tags', 'SRS Status', 'Repetition', 'Interval (Days)', 'E-Factor', 'Next Review Date', 'Last Reviewed'];
     const sampleData = [
-      ['apple', '/ˈæp.əl/', 'quả táo', 'A round fruit with red, green, or yellow skin and crisp white flesh', 'He ate a red apple.'],
-      ['benevolent', '/bəˈnev.əl.ənt/', 'nhân từ', 'Kind and helpful', 'A benevolent gentleman donated $5000 to charity.'],
-      ['resilient', '', '', '', 'She is a resilient girl. (Meaning & phonetic will auto-fill)']
+      ['apple', '/ˈæp.əl/', 'quả táo', 'A round fruit with red, green, or yellow skin and crisp white flesh', 'He ate a red apple.', 'Fruit', 'Chưa học', '0', '1', '2.5', '2026-08-11', ''],
+      ['benevolent', '/bəˈnev.əl.ənt/', 'nhân từ', 'Kind and helpful', 'A benevolent gentleman donated $5000 to charity.', 'Adjective', 'Thành thạo', '3', '15', '2.6', '2026-08-25', '2026-08-10'],
+      ['resilient', '', '', '', 'She is a resilient girl. (Meaning & phonetic will auto-fill)', '', 'Chưa học', '0', '1', '2.5', '', '']
     ];
     
     const csvContent = "\uFEFF" + [headers, ...sampleData].map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -165,6 +170,11 @@ const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTa
         let exampleIdx = -1;
         let tagIdx = -1;
         let typeIdx = -1;
+        let repIdx = -1;
+        let intervalIdx = -1;
+        let efactorIdx = -1;
+        let nextReviewIdx = -1;
+        let lastReviewIdx = -1;
 
         headers.forEach((header, index) => {
           if (WORD_HEADERS.includes(header)) wordIdx = index;
@@ -174,6 +184,11 @@ const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTa
           else if (EXAMPLE_HEADERS.includes(header)) exampleIdx = index;
           else if (TAG_HEADERS.includes(header)) tagIdx = index;
           else if (TYPE_HEADERS.includes(header)) typeIdx = index;
+          else if (REP_HEADERS.includes(header)) repIdx = index;
+          else if (INTERVAL_HEADERS.includes(header)) intervalIdx = index;
+          else if (EFACTOR_HEADERS.includes(header)) efactorIdx = index;
+          else if (NEXT_REVIEW_HEADERS.includes(header)) nextReviewIdx = index;
+          else if (LAST_REVIEW_HEADERS.includes(header)) lastReviewIdx = index;
         });
 
         // Fallback to positional mapping if Word column is not detected
@@ -202,6 +217,48 @@ const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTa
           const rawTags = tagIdx !== -1 && row[tagIdx] ? String(row[tagIdx]).split(',').map(t => t.trim()).filter(Boolean) : [];
           const rawType = typeIdx !== -1 && row[typeIdx] ? String(row[typeIdx]).trim() : '';
 
+          const parseRepetitionVal = (idx, fallback) => {
+            if (idx !== -1 && row[idx] !== undefined && row[idx] !== '') {
+              const str = String(row[idx]).trim().toLowerCase();
+              if (str.includes('thành thạo') || str.includes('mastered')) return 3;
+              if (str.includes('đang học') || str.includes('learning')) return 1;
+              if (str.includes('chưa học') || str.includes('new')) return 0;
+              const n = Number(row[idx]);
+              return isNaN(n) ? fallback : n;
+            }
+            return fallback;
+          };
+
+          const parseNum = (idx, fallback) => {
+            if (idx !== -1 && row[idx] !== undefined && row[idx] !== '') {
+              const n = Number(row[idx]);
+              return isNaN(n) ? fallback : n;
+            }
+            return fallback;
+          };
+
+          const parseNextRev = () => {
+            if (nextReviewIdx !== -1 && row[nextReviewIdx]) {
+              const val = row[nextReviewIdx];
+              const parsed = Date.parse(val);
+              if (!isNaN(parsed)) return new Date(parsed).setHours(0, 0, 0, 0);
+              const n = Number(val);
+              if (!isNaN(n) && n > 0) return n;
+            }
+            return new Date().setHours(0, 0, 0, 0);
+          };
+
+          const parseLastRev = () => {
+            if (lastReviewIdx !== -1 && row[lastReviewIdx]) {
+              const val = row[lastReviewIdx];
+              const parsed = Date.parse(val);
+              if (!isNaN(parsed)) return new Date(parsed).getTime();
+              const n = Number(val);
+              if (!isNaN(n) && n > 0) return n;
+            }
+            return null;
+          };
+
           // Check if duplicate in existing vocab library
           const isDuplicate = words.some(existing => 
             existing.word.trim().toLowerCase() === rawWord.toLowerCase()
@@ -218,6 +275,11 @@ const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTa
             example: rawExample,
             tags: rawTags,
             wordType: rawType,
+            repetition: parseRepetitionVal(repIdx, 0),
+            interval: parseNum(intervalIdx, 1),
+            efactor: parseNum(efactorIdx, 2.5),
+            nextReviewDate: parseNextRev(),
+            lastReviewed: parseLastRev(),
             isDuplicate
           });
 
@@ -376,12 +438,26 @@ const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTa
           example: finalExample || existingWord.example,
           tags: (finalTags && finalTags.length > 0) ? finalTags : existingWord.tags,
           wordType: finalType || existingWord.wordType,
+          repetition: (currentItem.repetition !== undefined && currentItem.repetition > 0) ? currentItem.repetition : existingWord.repetition,
+          interval: (currentItem.interval !== undefined && currentItem.interval > 1) ? currentItem.interval : existingWord.interval,
+          efactor: currentItem.efactor ?? existingWord.efactor,
+          nextReviewDate: currentItem.nextReviewDate || existingWord.nextReviewDate,
+          lastReviewed: currentItem.lastReviewed || existingWord.lastReviewed,
         };
         
         if (onUpdateWord) onUpdateWord(updatedWordObj);
         addedDuringThisImport.set(currentItem.word.trim().toLowerCase(), updatedWordObj);
         updatedCount++;
       } else {
+        const srsFields = {
+          repetition: currentItem.repetition ?? 0,
+          interval: currentItem.interval ?? 1,
+          efactor: currentItem.efactor ?? 2.5,
+          nextReviewDate: currentItem.nextReviewDate ?? new Date().setHours(0, 0, 0, 0),
+          lastReviewed: currentItem.lastReviewed ?? null,
+          isReviewedToday: false
+        };
+
         const newWordObj = {
           id: uuidv4(),
           word: currentItem.word,
@@ -391,7 +467,7 @@ const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTa
           example: finalExample,
           tags: finalTags,
           wordType: finalType,
-          ...getInitialSRSData(),
+          ...srsFields,
           dateAdded: new Date().getTime()
         };
 

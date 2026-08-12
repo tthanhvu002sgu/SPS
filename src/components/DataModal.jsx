@@ -13,63 +13,138 @@ const DataModal = ({
 }) => {
   const [importMode, setImportMode] = useState('merge');
   const [dataMessage, setDataMessage] = useState('');
+  const [stripSRS, setStripSRS] = useState(false);
+  const [onlyNoSRS, setOnlyNoSRS] = useState(false);
   const fileInputRef = useRef(null);
   const excelInputRef = useRef(null);
   const csvInputRef = useRef(null);
 
-  const handleExportJSON = (useFiltered) => {
-    const dataToExport = useFiltered ? filteredWords : (getFullSnapshotForBackup ? getFullSnapshotForBackup() : words);
+  const cleanSRSInfo = (word) => {
+    const {
+      repetition,
+      interval,
+      efactor,
+      ease,
+      nextReviewDate,
+      lastReviewed,
+      isReviewedToday,
+      ...cleanWord
+    } = word;
+    return cleanWord;
+  };
+
+  const getExportData = (useFiltered) => {
+    let source = useFiltered ? filteredWords : words;
+    if (onlyNoSRS) {
+      source = source.filter(
+        (w) => (!w.lastReviewed || w.lastReviewed === null) && (w.repetition === 0 || !w.repetition)
+      );
+    }
+    return source;
+  };
+
+  const handleExportJSON = (useFiltered, forceStrip = false) => {
+    const source = getExportData(useFiltered);
+    const shouldStrip = stripSRS || forceStrip;
+
+    if (source.length === 0 && onlyNoSRS) {
+      alert('Không tìm thấy từ vựng nào chưa có thông tin SRS.');
+      return;
+    }
+
+    let dataToExport;
+    if (!useFiltered && !shouldStrip && !onlyNoSRS && getFullSnapshotForBackup) {
+      dataToExport = getFullSnapshotForBackup();
+    } else {
+      dataToExport = shouldStrip ? source.map(cleanSRSInfo) : source;
+    }
+
+    const suffix = `${onlyNoSRS ? '_unstudied' : ''}${shouldStrip ? '_no_srs' : ''}`;
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(dataToExport, null, 2));
     const node = document.createElement('a');
     node.setAttribute('href', dataStr);
-    node.setAttribute('download', `spacedrep_backup_${new Date().toISOString().split('T')[0]}.json`);
+    node.setAttribute('download', `spacedrep_vocab${suffix}_${new Date().toISOString().split('T')[0]}.json`);
     document.body.appendChild(node);
     node.click();
     node.remove();
-    setDataMessage('Đã xuất file JSON thành công.');
+    setDataMessage(`Đã xuất file JSON${shouldStrip ? ' (không có SRS)' : ''}${onlyNoSRS ? ' (từ chưa học)' : ''} thành công.`);
     setTimeout(() => setDataMessage(''), 3000);
   };
 
+  const getSRSStatus = (word) => {
+    if (!word.lastReviewed && (!word.repetition || word.repetition === 0)) return 'Chưa học';
+    if (word.repetition >= 3) return 'Thành thạo';
+    return 'Đang học';
+  };
+
   const handleExportExcel = (useFiltered) => {
-    const dataToExport = useFiltered ? filteredWords : words;
+    const dataToExport = getExportData(useFiltered);
     if (dataToExport.length === 0) {
       alert('Không có từ vựng nào để xuất.');
       return;
     }
-    const data = dataToExport.map((w) => ({
-      Word: w.word,
-      Phonetic: w.phonetic || '',
-      Type: w.wordType || '',
-      'Meaning (EN)': w.meaning || '',
-      'Meaning (VI)': w.viMeaning || '',
-      Example: w.example || '',
-      Tags: (w.tags || []).join(', '),
-    }));
+    const data = dataToExport.map((w) => {
+      const row = {
+        Word: w.word,
+        Phonetic: w.phonetic || '',
+        Type: w.wordType || '',
+        'Meaning (EN)': w.meaning || '',
+        'Meaning (VI)': w.viMeaning || '',
+        Example: w.example || '',
+        Tags: (w.tags || []).join(', '),
+      };
+      if (!stripSRS) {
+        row['SRS Status'] = getSRSStatus(w);
+        row['Repetition'] = w.repetition ?? 0;
+        row['Interval (Days)'] = w.interval ?? 1;
+        row['E-Factor'] = w.efactor ?? w.ease ?? 2.5;
+        row['Next Review Date'] = w.nextReviewDate ? new Date(w.nextReviewDate).toISOString().split('T')[0] : '';
+        row['Last Reviewed'] = w.lastReviewed ? new Date(w.lastReviewed).toISOString().split('T')[0] : '';
+      }
+      return row;
+    });
+    const suffix = onlyNoSRS ? '_unstudied' : '';
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Vocab');
-    XLSX.writeFile(wb, `spacedrep_vocab_${new Date().toISOString().split('T')[0]}.xlsx`);
-    setDataMessage('Đã xuất file Excel.');
+    XLSX.writeFile(wb, `spacedrep_vocab${suffix}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    setDataMessage(`Đã xuất file Excel (kèm thông tin SRS).`);
     setTimeout(() => setDataMessage(''), 3000);
   };
 
   const handleExportCSV = (useFiltered) => {
-    const dataToExport = useFiltered ? filteredWords : words;
+    const dataToExport = getExportData(useFiltered);
     if (dataToExport.length === 0) {
       alert('Không có từ vựng nào để xuất.');
       return;
     }
 
-    const headers = ['Word', 'Phonetic', 'Type', 'Meaning (EN)', 'Meaning (VI)', 'Example', 'Tags'];
-    const rows = dataToExport.map((w) => [
-      w.word || '',
-      w.phonetic || '',
-      w.wordType || '',
-      w.meaning || '',
-      w.viMeaning || '',
-      w.example || '',
-      (w.tags || []).join(', '),
-    ]);
+    const headers = stripSRS
+      ? ['Word', 'Phonetic', 'Type', 'Meaning (EN)', 'Meaning (VI)', 'Example', 'Tags']
+      : ['Word', 'Phonetic', 'Type', 'Meaning (EN)', 'Meaning (VI)', 'Example', 'Tags', 'SRS Status', 'Repetition', 'Interval (Days)', 'E-Factor', 'Next Review Date', 'Last Reviewed'];
+
+    const rows = dataToExport.map((w) => {
+      const baseRow = [
+        w.word || '',
+        w.phonetic || '',
+        w.wordType || '',
+        w.meaning || '',
+        w.viMeaning || '',
+        w.example || '',
+        (w.tags || []).join(', '),
+      ];
+      if (!stripSRS) {
+        baseRow.push(
+          getSRSStatus(w),
+          w.repetition ?? 0,
+          w.interval ?? 1,
+          w.efactor ?? w.ease ?? 2.5,
+          w.nextReviewDate ? new Date(w.nextReviewDate).toISOString().split('T')[0] : '',
+          w.lastReviewed ? new Date(w.lastReviewed).toISOString().split('T')[0] : ''
+        );
+      }
+      return baseRow;
+    });
 
     const formatCell = (val) => {
       const stringVal = String(val ?? '');
@@ -83,17 +158,18 @@ const DataModal = ({
       '\uFEFF' +
       [headers, ...rows].map((row) => row.map(formatCell).join(',')).join('\n');
 
+    const suffix = onlyNoSRS ? '_unstudied' : '';
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `spacedrep_vocab_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `spacedrep_vocab${suffix}_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    setDataMessage('Đã xuất file CSV thành công.');
+    setDataMessage(`Đã xuất file CSV (kèm thông tin SRS) thành công.`);
     setTimeout(() => setDataMessage(''), 3000);
   };
 
@@ -163,13 +239,57 @@ const DataModal = ({
               return '';
             };
 
+            const parseRepetitionVal = (keys, fallback = 0) => {
+              const val = getVal(keys);
+              if (val !== '' && val !== undefined && val !== null) {
+                const str = String(val).trim().toLowerCase();
+                if (str.includes('thành thạo') || str.includes('mastered')) return 3;
+                if (str.includes('đang học') || str.includes('learning')) return 1;
+                if (str.includes('chưa học') || str.includes('new')) return 0;
+                const n = Number(val);
+                return isNaN(n) ? fallback : n;
+              }
+              return fallback;
+            };
+
+            const parseNum = (keys, fallback) => {
+              const val = getVal(keys);
+              if (val !== '' && val !== undefined && val !== null) {
+                const n = Number(val);
+                return isNaN(n) ? fallback : n;
+              }
+              return fallback;
+            };
+
+            const parseNextReview = () => {
+              const val = getVal(['next review date', 'nextreviewdate', 'ngày ôn tiếp theo', 'ngày ôn']);
+              if (val) {
+                const parsed = Date.parse(val);
+                if (!isNaN(parsed)) return new Date(parsed).setHours(0, 0, 0, 0);
+                const n = Number(val);
+                if (!isNaN(n) && n > 0) return n;
+              }
+              return new Date().setHours(0, 0, 0, 0);
+            };
+
+            const parseLastReviewed = () => {
+              const val = getVal(['last reviewed', 'lastreviewed', 'lần ôn cuối', 'ngày ôn cuối']);
+              if (val) {
+                const parsed = Date.parse(val);
+                if (!isNaN(parsed)) return new Date(parsed).getTime();
+                const n = Number(val);
+                if (!isNaN(n) && n > 0) return n;
+              }
+              return null;
+            };
+
             return {
               id: uuidv4(),
-              word: String(getVal(['word', 'từ', 'từ vựng', 'vocab'])).trim(),
-              phonetic: String(getVal(['phonetic', 'phiên âm', 'pronunciation'])).trim(),
-              wordType: String(getVal(['type', 'word type', 'từ loại'])).trim(),
-              meaning: String(getVal(['meaning (en)', 'meaning', 'english', 'định nghĩa'])).trim(),
-              viMeaning: String(getVal(['meaning (vi)', 'vietnamese', 'vi', 'nghĩa tiếng việt', 'nghĩa vi', 'dịch nghĩa', 'nghĩa'])).trim(),
+              word: String(getVal(['word', 'từ', 'từ vựng', 'vocab', 'term'])).trim(),
+              phonetic: String(getVal(['phonetic', 'phiên âm', 'pronunciation', 'phát âm', 'ipa'])).trim(),
+              wordType: String(getVal(['type', 'word type', 'từ loại', 'loại từ'])).trim(),
+              meaning: String(getVal(['meaning (en)', 'meaning', 'english', 'definition', 'định nghĩa', 'nghĩa tiếng anh'])).trim(),
+              viMeaning: String(getVal(['meaning (vi)', 'vietnamese', 'vi', 'vimeaning', 'nghĩa tiếng việt', 'tiếng việt', 'nghĩa vi', 'dịch nghĩa', 'nghĩa'])).trim(),
               example: String(getVal(['example', 'examples', 'example chunks', 'ví dụ', 'câu ví dụ', 'sentence'])).trim(),
               tags: getVal(['tags', 'tag', 'chủ đề'])
                 ? String(getVal(['tags', 'tag', 'chủ đề']))
@@ -177,10 +297,11 @@ const DataModal = ({
                     .map((t) => t.trim())
                     .filter(Boolean)
                 : [],
-              repetition: 0,
-              interval: 1,
-              ease: 2.5,
-              nextReviewDate: new Date().setHours(0, 0, 0, 0),
+              repetition: parseRepetitionVal(['repetition', 'số lần ôn', 'rep', 'lần ôn', 'srs', 'srs status', 'srs stage', 'srs level', 'srs count', 'srs repetition'], 0),
+              interval: parseNum(['interval (days)', 'interval', 'khoảng cách', 'khoảng cách ôn'], 1),
+              efactor: parseNum(['e-factor', 'efactor', 'ease', 'hệ số dễ', 'ef'], 2.5),
+              nextReviewDate: parseNextReview(),
+              lastReviewed: parseLastReviewed(),
             };
           })
           .filter((w) => w.word !== '');
@@ -240,6 +361,50 @@ const DataModal = ({
               return '';
             };
 
+            const parseRepetitionVal = (keys, fallback = 0) => {
+              const val = getVal(keys);
+              if (val !== '' && val !== undefined && val !== null) {
+                const str = String(val).trim().toLowerCase();
+                if (str.includes('thành thạo') || str.includes('mastered')) return 3;
+                if (str.includes('đang học') || str.includes('learning')) return 1;
+                if (str.includes('chưa học') || str.includes('new')) return 0;
+                const n = Number(val);
+                return isNaN(n) ? fallback : n;
+              }
+              return fallback;
+            };
+
+            const parseNum = (keys, fallback) => {
+              const val = getVal(keys);
+              if (val !== '' && val !== undefined && val !== null) {
+                const n = Number(val);
+                return isNaN(n) ? fallback : n;
+              }
+              return fallback;
+            };
+
+            const parseNextReview = () => {
+              const val = getVal(['next review date', 'nextreviewdate', 'ngày ôn tiếp theo', 'ngày ôn']);
+              if (val) {
+                const parsed = Date.parse(val);
+                if (!isNaN(parsed)) return new Date(parsed).setHours(0, 0, 0, 0);
+                const n = Number(val);
+                if (!isNaN(n) && n > 0) return n;
+              }
+              return new Date().setHours(0, 0, 0, 0);
+            };
+
+            const parseLastReviewed = () => {
+              const val = getVal(['last reviewed', 'lastreviewed', 'lần ôn cuối', 'ngày ôn cuối']);
+              if (val) {
+                const parsed = Date.parse(val);
+                if (!isNaN(parsed)) return new Date(parsed).getTime();
+                const n = Number(val);
+                if (!isNaN(n) && n > 0) return n;
+              }
+              return null;
+            };
+
             return {
               id: uuidv4(),
               word: String(getVal(['word', 'từ', 'từ vựng', 'vocab', 'term'])).trim(),
@@ -254,10 +419,11 @@ const DataModal = ({
                     .map((t) => t.trim())
                     .filter(Boolean)
                 : [],
-              repetition: 0,
-              interval: 1,
-              ease: 2.5,
-              nextReviewDate: new Date().setHours(0, 0, 0, 0),
+              repetition: parseRepetitionVal(['repetition', 'số lần ôn', 'rep', 'lần ôn', 'srs', 'srs status', 'srs stage', 'srs level', 'srs count', 'srs repetition'], 0),
+              interval: parseNum(['interval (days)', 'interval', 'khoảng cách', 'khoảng cách ôn'], 1),
+              efactor: parseNum(['e-factor', 'efactor', 'ease', 'hệ số dễ', 'ef'], 2.5),
+              nextReviewDate: parseNextReview(),
+              lastReviewed: parseLastReviewed(),
             };
           })
           .filter((w) => w.word !== '');
@@ -360,6 +526,27 @@ const DataModal = ({
             <h4 style={{ marginBottom: '0.75rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <Download size={18} /> Xuất Dữ Liệu
             </h4>
+
+            {/* SRS Toggles */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.75rem', fontSize: '0.85rem', background: 'var(--glass-bg)', padding: '0.6rem 0.75rem', borderRadius: '8px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={stripSRS}
+                  onChange={(e) => setStripSRS(e.target.checked)}
+                />
+                <span>Loại bỏ thông tin SRS (chỉ xuất nội dung từ vựng)</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={onlyNoSRS}
+                  onChange={(e) => setOnlyNoSRS(e.target.checked)}
+                />
+                <span>Chỉ xuất từ vựng chưa có SRS (chưa học)</span>
+              </label>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <button onClick={() => handleExportJSON(false)} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem' }}>
                 JSON (Tất cả)
@@ -368,6 +555,23 @@ const DataModal = ({
                 JSON (Theo bộ lọc)
               </button>
             </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <button
+                onClick={() => handleExportJSON(false, true)}
+                className="btn btn-outline"
+                style={{
+                  justify: 'center',
+                  fontSize: '0.85rem',
+                  color: 'var(--accent-primary)',
+                  borderColor: 'var(--accent-primary)',
+                  background: 'rgba(59, 130, 246, 0.08)'
+                }}
+              >
+                <Download size={14} /> JSON Sạch (Không kèm dữ liệu SRS)
+              </button>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <button onClick={() => handleExportExcel(false)} className="btn btn-outline" style={{ justifyContent: 'center', fontSize: '0.85rem', color: 'var(--accent-success)', borderColor: 'rgba(16,185,129,0.3)' }}>
                 Excel (Tất cả)

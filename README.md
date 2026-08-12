@@ -25,7 +25,7 @@ npm run deploy   # gh-pages (base: /SPS/)
 - **Thư viện**: thêm thủ công / nhanh / Excel-CSV, tìm kiếm, filter (đến hạn / chưa học / thành thạo / tag / từ loại), sửa/xóa, phân trang.
 - **Auto-tag** (Gemini) + gợi ý chủ đề mới.
 - **Cài đặt**: daily limit, interval, giọng TTS, theme Sepia/Dark, Gemini key/model, bật câu & max câu.
-- **Backup**: export JSON đầy đủ (words + history + topics + settings); import merge hoặc replace; auto-backup hàng ngày; restore.
+- **Backup**: export JSON đầy đủ (words + history + topics + settings); import merge hoặc replace; auto-backup hàng ngày; restore; export JSON/Excel/CSV sạch không kèm SRS hoặc chỉ từ chưa học.
 - **PWA nhẹ**: manifest + service worker cache shell offline.
 - **Hiệu năng**: load localStorage không block UI; dịch VI nền; lazy tab Library/Settings; dynamic `xlsx`.
 
@@ -62,6 +62,27 @@ public/
 | `Dashboard` | Streak, mastered, accuracy 7 ngày |
 
 ## 4. Các task đã làm
+
+### [2026-08-12] Add Explicit SRS Status Column & Expand Header Aliases for CSV/Excel `(FAST)`
+- **Lane / Mode:** FEATURE FAST
+- **Tóm tắt:** Bổ sung trực tiếp cột `SRS Status` (trạng thái "Chưa học", "Đang học", "Thành thạo") vào file xuất CSV, Excel và file mẫu CSV; đồng thời hỗ trợ nhận diện linh hoạt các tên cột SRS khác nhau (`srs`, `srs status`, `srs level`, `srs stage`, `srs count`) khi import.
+- **Thay đổi chính:**
+  - `DataModal.jsx`: Thêm cột `SRS Status` vào danh sách header & dữ liệu xuất file CSV (`handleExportCSV`) và Excel (`handleExportExcel`). Bổ sung `parseRepetitionVal` hỗ trợ đọc cả dạng số lẫn dạng văn bản trạng thái SRS ("Thành thạo" -> 3, "Đang học" -> 1, "Chưa học" -> 0) và mở rộng danh sách header SRS tương thích khi import.
+  - `ImportExcelCSV.jsx`: Thêm cột `SRS Status` vào file mẫu CSV (`handleDownloadTemplate`). Thêm danh sách tên cột mở rộng `srs`, `srs status`, `srs stage`, `srs level`, `srs count`, `srs repetition` vào `REP_HEADERS` và cập nhật logic `parseRepetitionVal` khi import từ file.
+- **Files / areas chạm:** `src/components/DataModal.jsx`, `src/components/ImportExcelCSV.jsx`, `README.md`
+- **Ảnh hưởng README:** §1, §4
+- **Verify:** Chạy lệnh `npm run build` thành công.
+
+### [2026-08-11] Full SRS Information Export & Import for Excel, CSV and JSON `(FAST)`
+- **Lane / Mode:** FEATURE FAST
+- **Tóm tắt:** Bổ sung đầy đủ thông tin SRS (`repetition`, `interval`, `efactor`, `nextReviewDate`, `lastReviewed`) vào tệp xuất Excel, CSV và JSON; đồng thời hỗ trợ đọc và khôi phục tiến trình SRS khi import tệp Excel/CSV.
+- **Thay đổi chính:**
+  - `DataModal.jsx`: Cập nhật xuất Excel (`handleExportExcel`) và CSV (`handleExportCSV`) tự động bao gồm các cột SRS: `Repetition` (số lần ôn), `Interval (Days)` (khoảng cách ôn), `E-Factor` (hệ số EF), `Next Review Date` (ngày ôn tiếp), `Last Reviewed` (ngày ôn cuối).
+  - `DataModal.jsx` & `ImportExcelCSV.jsx`: Cập nhật logic import file Excel/CSV tự động phát hiện và đọc thông tin SRS để khôi phục chính xác tiến độ học cũ thay vì reset về 0.
+  - Vẫn duy trì nút/tùy chọn xuất file sạch ("Loại bỏ thông tin SRS") khi người dùng muốn xuất danh sách từ thuần túy.
+- **Files / areas chạm:** `src/components/DataModal.jsx`, `src/components/ImportExcelCSV.jsx`, `README.md`
+- **Ảnh hưởng README:** §1, §4
+- **Verify:** Chạy lệnh `npm run build` thành công.
 
 ### [2026-08-11] Prioritized Randomization for Study Session Queue `(FAST)`
 - **Lane / Mode:** FEATURE FAST
