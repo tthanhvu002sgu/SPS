@@ -103,18 +103,35 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
   };
 
   return (
-    <div className="modal-overlay" onClick={isRunning ? undefined : onClose} style={{ zIndex: 1100 }}>
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0, 0, 0, 0.65)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+        zIndex: 1100,
+        display: 'grid',
+        placeItems: 'center',
+        padding: '1rem',
+      }}
+      onClick={isRunning ? undefined : onClose}
+    >
       <div
-        className="modal-content animate-fade-in"
+        className="modal-panel"
         onClick={(e) => e.stopPropagation()}
         style={{
           maxWidth: '560px',
-          width: '90%',
+          width: '100%',
           maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
           padding: '1.5rem',
-          borderRadius: '16px',
+          overflowY: 'auto',
+          boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)',
         }}
       >
         {/* Header */}
@@ -232,7 +249,7 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
                       gap: '0.6rem',
                       padding: '0.6rem 0.8rem',
                       borderRadius: '8px',
-                      background: scope === 'filtered' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(0,0,0,0.03)',
+                      background: scope === 'filtered' ? 'rgba(59, 130, 246, 0.15)' : 'var(--glass-bg, rgba(255,255,255,0.04))',
                       border: scope === 'filtered' ? '1px solid var(--accent-secondary)' : '1px solid var(--glass-border)',
                       cursor: 'pointer',
                       fontSize: '0.85rem',
@@ -259,7 +276,7 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
                       gap: '0.6rem',
                       padding: '0.6rem 0.8rem',
                       borderRadius: '8px',
-                      background: scope === 'all' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(0,0,0,0.03)',
+                      background: scope === 'all' ? 'rgba(59, 130, 246, 0.15)' : 'var(--glass-bg, rgba(255,255,255,0.04))',
                       border: scope === 'all' ? '1px solid var(--accent-secondary)' : '1px solid var(--glass-border)',
                       cursor: 'pointer',
                       fontSize: '0.85rem',
@@ -294,7 +311,7 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
                       gap: '0.5rem',
                       padding: '0.5rem 0.7rem',
                       borderRadius: '8px',
-                      background: 'rgba(0,0,0,0.02)',
+                      background: 'var(--glass-bg, rgba(255,255,255,0.04))',
                       border: '1px solid var(--glass-border)',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
@@ -317,7 +334,7 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
                       gap: '0.5rem',
                       padding: '0.5rem 0.7rem',
                       borderRadius: '8px',
-                      background: 'rgba(0,0,0,0.02)',
+                      background: 'var(--glass-bg, rgba(255,255,255,0.04))',
                       border: '1px solid var(--glass-border)',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
@@ -340,7 +357,7 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
                       gap: '0.5rem',
                       padding: '0.5rem 0.7rem',
                       borderRadius: '8px',
-                      background: 'rgba(0,0,0,0.02)',
+                      background: 'var(--glass-bg, rgba(255,255,255,0.04))',
                       border: '1px solid var(--glass-border)',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
@@ -363,7 +380,7 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
                       gap: '0.5rem',
                       padding: '0.5rem 0.7rem',
                       borderRadius: '8px',
-                      background: 'rgba(0,0,0,0.02)',
+                      background: 'var(--glass-bg, rgba(255,255,255,0.04))',
                       border: '1px solid var(--glass-border)',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
