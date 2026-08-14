@@ -12,9 +12,11 @@ import {
   Undo2,
   SkipForward,
   Folder,
+  Layers,
 } from 'lucide-react';
 import { processReview } from '../utils/srs';
 import { formatLineBreaks } from '../utils/formatText';
+import { fetchCollocations } from '../utils/enrichVocab';
 import Dashboard from './Dashboard';
 
 const MarkdownText = ({ text }) => {
@@ -79,6 +81,7 @@ const StudySession = ({
   const [editMeaning, setEditMeaning] = useState('');
   const [editViMeaning, setEditViMeaning] = useState('');
   const [editExample, setEditExample] = useState('');
+  const [editCollocations, setEditCollocations] = useState('');
   const [isAutoLoading, setIsAutoLoading] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -529,6 +532,7 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
     setEditMeaning(currentWord.meaning || '');
     setEditViMeaning(currentWord.viMeaning || '');
     setEditExample(currentWord.example || '');
+    setEditCollocations(Array.isArray(currentWord.collocations) ? currentWord.collocations.join('\n') : (currentWord.collocations || ''));
     setEditError('');
     setIsEditing(true);
   };
@@ -551,6 +555,11 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
       }
       const translated = await translateToVi(editWord.trim());
       if (translated) setEditViMeaning(translated);
+
+      const cols = await fetchCollocations(editWord.trim());
+      if (cols && cols.length > 0) {
+        setEditCollocations(cols.join('\n'));
+      }
     } catch {
       setEditError('Lỗi khi tự động tra cứu từ vựng.');
     } finally {
@@ -563,6 +572,11 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
       setEditError('Từ tiếng Anh không được để trống.');
       return;
     }
+    const parsedCollocations = editCollocations
+      .split(/[\n,;•·|]+/)
+      .map((c) => c.trim())
+      .filter(Boolean);
+
     const updatedWord = {
       ...currentWord,
       word: editWord.trim(),
@@ -570,6 +584,7 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
       meaning: editMeaning.trim(),
       viMeaning: editViMeaning.trim(),
       example: editExample.trim(),
+      collocations: parsedCollocations,
     };
     onUpdateWord(updatedWord);
     setCurrentWord(updatedWord);
@@ -1281,6 +1296,16 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
                   value={editViMeaning}
                   onChange={(e) => setEditViMeaning(e.target.value)}
                 />
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                  3 Collocations tiếng Anh
+                </label>
+                <textarea
+                  className="input-field"
+                  value={editCollocations}
+                  onChange={(e) => setEditCollocations(e.target.value)}
+                  placeholder="Mỗi cụm 1 dòng (vd: final decision)"
+                  rows={2}
+                />
                 <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>Ví dụ</label>
                 <textarea
                   className="input-field"
@@ -1552,6 +1577,26 @@ Hãy nhận xét chi tiết và trả lời ngắn gọn bằng tiếng Việt t
                     </p>
                   )}
                   {currentWord.meaning && <p className="word-meaning preserve-newlines">{formatLineBreaks(currentWord.meaning)}</p>}
+                  {currentWord.collocations && currentWord.collocations.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', justifyContent: 'center', margin: '0.5rem 0' }}>
+                      {currentWord.collocations.map((c, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            fontSize: '0.85rem',
+                            padding: '0.2rem 0.6rem',
+                            background: 'rgba(16, 185, 129, 0.12)',
+                            color: 'var(--accent-success, #10b981)',
+                            borderRadius: '6px',
+                            fontWeight: 600,
+                            border: '1px solid rgba(16, 185, 129, 0.25)',
+                          }}
+                        >
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {currentWord.example && <p className="word-example preserve-newlines">&ldquo;{formatLineBreaks(currentWord.example)}&rdquo;</p>}
                 </div>
               </div>

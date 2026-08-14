@@ -18,14 +18,16 @@ npm run deploy   # gh-pages (base: /SPS/)
 ## 1. Tổng quan tính năng
 
 - **Học SRS**: hàng đợi từ đến hạn (ưu tiên quá hạn & xáo trộn ngẫu nhiên từ cùng hạn ôn), giới hạn daily, 2 mức chấm (Quên / Dễ).
+- **Collocations & Ví dụ**: Tự động lấy **3 Collocations tiếng Anh chuẩn ngữ liệu** (Datamuse API / COCA corpus) và **câu ví dụ ngữ cảnh sinh động** (Tatoeba Bilingual Corpus & Dictionary API), hiển thị trên thẻ Flashcard và danh sách từ vựng.
+- **Điền dữ liệu tự động (Batch Enrichment)**: Quét và làm giàu hàng loạt từ vựng thiếu thông tin (nghĩa TV, collocations, ví dụ, phiên âm) với thanh tiến trình trực quan, xử lý song song không làm nghẽn giao diện.
 - **Luyện tự do**: ôn không ảnh hưởng lịch SRS.
 - **Lọc tag** khi bắt đầu phiên; **xáo mặt thẻ** Anh ↔ Việt.
 - **Bài đặt câu** sau flashcard (bật/tắt, giới hạn số từ, bỏ qua trong phiên).
 - **Hoàn tác** chấm điểm gần nhất (nút / Ctrl+Z).
-- **Thư viện**: thêm thủ công / nhanh / Excel-CSV, tìm kiếm, filter (đến hạn / chưa học / thành thạo / tag / từ loại), sửa/xóa, phân trang.
+- **Thư viện**: thêm thủ công / nhanh / Excel-CSV, tìm kiếm, filter (đến hạn / chưa học / thành thạo / tag / từ loại / thiếu collocations / thiếu ví dụ / thiếu nghĩa), sửa/xóa, phân trang.
 - **Auto-tag** (Gemini) + gợi ý chủ đề mới.
 - **Cài đặt**: daily limit, interval, giọng TTS, theme Sepia/Dark, Gemini key/model, bật câu & max câu.
-- **Backup**: export JSON đầy đủ (words + history + topics + settings); import merge hoặc replace; auto-backup hàng ngày; restore; export JSON/Excel/CSV sạch không kèm SRS hoặc chỉ từ chưa học.
+- **Backup**: export JSON đầy đủ (words + history + topics + settings); import merge hoặc replace; auto-backup hàng ngày; restore; export JSON/Excel/CSV sạch không kèm SRS hoặc chỉ từ chưa học (kèm cột Collocations).
 - **PWA nhẹ**: manifest + service worker cache shell offline.
 - **Hiệu năng**: load localStorage không block UI; dịch VI nền; lazy tab Library/Settings; dynamic `xlsx`.
 
@@ -34,15 +36,16 @@ npm run deploy   # gh-pages (base: /SPS/)
 ```
 src/
   App.jsx              # shell, nav desktop/mobile, lazy tabs
-  hooks/useVocab.js    # state + localStorage + backup/import
+  hooks/useVocab.js    # state + localStorage + backup/import + batch update
   components/
-    StudySession.jsx   # dashboard + session flashcard/sentence
-    WordList.jsx       # library + filters
-    AddWord.jsx        # add / quick / auto-tag
-    ImportExcelCSV.jsx # dynamic xlsx import
+    StudySession.jsx   # dashboard + session flashcard/sentence + collocations view
+    WordList.jsx       # library + filters + missing collocations filter
+    EnrichModal.jsx    # modal làm giàu dữ liệu tự động hàng loạt
+    AddWord.jsx        # add / quick / auto-tag / auto-enrich collocations
+    ImportExcelCSV.jsx # dynamic xlsx import kèm collocations
     Settings.jsx
     Dashboard.jsx
-  utils/srs.js, tags.js, aiTagger.js
+  utils/srs.js, tags.js, aiTagger.js, enrichVocab.js
 public/
   manifest.webmanifest, sw.js, logo.svg
 ```
@@ -54,14 +57,30 @@ public/
 
 | Module | Vai trò |
 |--------|---------|
-| `useVocab` | CRUD từ, settings, history, snapshot import/export, streak |
-| `StudySession` | UI học, filter tag, undo, sentence skip/limit |
+| `useVocab` | CRUD từ, settings, history, snapshot import/export, streak, batchUpdate |
+| `StudySession` | UI học, filter tag, undo, sentence skip/limit, hiển thị collocations |
 | `WordList` + `AddWord` | Thư viện & nhập từ |
-| `ImportExcelCSV` | Parse Excel/CSV (lazy xlsx) |
+| `EnrichModal` | Modal làm giàu dữ liệu tự động hàng loạt (3 Collocations, ví dụ, nghĩa TV) |
+| `ImportExcelCSV` | Parse Excel/CSV (lazy xlsx) hỗ trợ cột Collocations & auto-fetch |
 | `Settings` | Theme, SRS, Gemini, data tools |
 | `Dashboard` | Streak, mastered, accuracy 7 ngày |
 
 ## 4. Các task đã làm
+
+### [2026-08-14] Integrate Datamuse 3 English Collocations, Tatoeba Examples & Batch Vocabulary Enrichment `(FULL)`
+- **Lane / Mode:** FEATURE FULL
+- **Tóm tắt:** Giải quyết triệt để vấn đề từ vựng thiếu nghĩa phù hợp, thiếu 3 collocations tiếng Anh và thiếu câu ví dụ cho tập dữ liệu lớn mà không bị phụ thuộc vào AI tạo mẫu câu lặp lại.
+- **Thay đổi chính:**
+  - `enrichVocab.js`: Xây dựng engine tự động lấy 3 Collocations tiếng Anh chuẩn ngữ liệu tự nhiên qua Datamuse API (COCA & Google N-Grams), lấy câu ví dụ song ngữ qua Tatoeba Corpus & Free Dictionary API, dịch nghĩa tiếng Việt và điều phối xử lý hàng loạt có kiểm soát luồng (concurrency control & throttling).
+  - `EnrichModal.jsx`: Thêm modal "Điền dữ liệu tự động" trực tiếp trên Web App với tùy chọn phạm vi (từ thiếu thông tin, từ đang lọc, toàn bộ thư viện), chọn trường cần bổ sung, thanh tiến trình % trực quan, nút dừng/tiếp tục và báo cáo tổng kết.
+  - `WordList.jsx`: Thêm bộ lọc "Thiếu Collocations", hiển thị 3 Collocations dạng badge chip trên từng thẻ từ, hỗ trợ chỉnh sửa Collocations và tích hợp nút kích hoạt `EnrichModal`.
+  - `StudySession.jsx`: Hiển thị 3 Collocations nổi bật ở mặt sau Flashcard khi học SRS, đồng thời hỗ trợ tra cứu và chỉnh sửa Collocations ngay trong phiên học.
+  - `AddWord.jsx` & `ImportExcelCSV.jsx`: Hỗ trợ trường `Collocations` khi nhập thủ công, nhập nhanh và import Excel/CSV; tự động gọi `enrichSingleWord` để làm giàu dữ liệu khi thêm từ.
+  - `DataModal.jsx`: Bổ sung cột `Collocations` vào file xuất Excel, CSV và logic import tương thích 100%.
+  - `useVocab.js` & `tags.js`: Chuẩn hóa `normalizeCollocations` và bổ sung `batchUpdateWords`.
+- **Files / areas chạm:** `src/utils/enrichVocab.js`, `src/components/EnrichModal.jsx`, `src/components/WordList.jsx`, `src/components/StudySession.jsx`, `src/components/AddWord.jsx`, `src/components/ImportExcelCSV.jsx`, `src/components/DataModal.jsx`, `src/hooks/useVocab.js`, `src/utils/tags.js`, `src/App.jsx`, `README.md`
+- **Ảnh hưởng README:** §1, §2, §3, §4
+- **Verify:** `npm run build` thành công, kiểm tra unit logic qua Node test scripts.
 
 ### [2026-08-12] Add Explicit SRS Status Column & Expand Header Aliases for CSV/Excel `(FAST)`
 - **Lane / Mode:** FEATURE FAST

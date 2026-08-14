@@ -372,6 +372,12 @@ export const useVocab = () => {
     }
   }, []);
 
+  const batchUpdateWords = useCallback((updatedWordsList) => {
+    if (!Array.isArray(updatedWordsList) || updatedWordsList.length === 0) return;
+    const updateMap = new Map(updatedWordsList.map((w) => [w.id, normalizeWordTags(w)]));
+    setWords((prev) => prev.map((w) => (updateMap.has(w.id) ? updateMap.get(w.id) : w)));
+  }, []);
+
   const updateWord = useCallback((updatedWord) => {
     setWords((prev) => prev.map((w) => (w.id === updatedWord.id ? normalizeWordTags(updatedWord) : w)));
   }, []);
@@ -459,6 +465,7 @@ export const useVocab = () => {
             viMeaning: w.viMeaning || existing.viMeaning,
             phonetic: w.phonetic || existing.phonetic,
             example: w.example || existing.example,
+            collocations: (w.collocations && w.collocations.length > 0) ? w.collocations : existing.collocations,
             wordType: w.wordType || existing.wordType,
             tags: w.tags?.length ? w.tags : existing.tags,
           }));
@@ -591,6 +598,7 @@ export const useVocab = () => {
     addWord,
     addWords,
     updateWord,
+    batchUpdateWords,
     deleteWord,
     clearAllWords,
     updateSettings,

@@ -1,23 +1,25 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Edit2, Trash2, Save, X, Search as SearchIcon, ChevronLeft, ChevronRight, Folder, Settings2, Filter, Tag, Download } from 'lucide-react';
+import { Edit2, Trash2, Save, X, Search as SearchIcon, ChevronLeft, ChevronRight, Folder, Settings2, Filter, Tag, Download, Sparkles, Layers } from 'lucide-react';
 import AddWord from './AddWord';
 import FolderManagerModal from './FolderManagerModal';
 import DataModal from './DataModal';
+import EnrichModal from './EnrichModal';
 import { WORD_TYPES, isWordType, isStatusTag } from '../utils/tags';
 import { formatLineBreaks } from '../utils/formatText';
 
-const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, updateFolder, deleteFolder, updateWord, deleteWord, addWord, addWords, importData, importSnapshot, getFullSnapshotForBackup }) => {
+const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, updateFolder, deleteFolder, updateWord, batchUpdateWords, deleteWord, addWord, addWords, importData, importSnapshot, getFullSnapshotForBackup }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({ word: '', meaning: '', example: '' });
+  const [editForm, setEditForm] = useState({ word: '', meaning: '', viMeaning: '', example: '', collocations: '', phonetic: '', wordType: '', tags: [] });
   const [currentPage, setCurrentPage] = useState(1);
   const [filterTag, setFilterTag] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState(''); // '', due, mastered, new
-  const [filterMissing, setFilterMissing] = useState(''); // '', 'meaning', 'example', 'phonetic'
+  const [filterMissing, setFilterMissing] = useState(''); // '', 'meaning', 'example', 'phonetic', 'collocations'
   const [activeFolderId, setActiveFolderId] = useState('default');
   const [showFolderManager, setShowFolderManager] = useState(false);
   const [showDataModal, setShowDataModal] = useState(false);
+  const [showEnrichModal, setShowEnrichModal] = useState(false);
   const ITEMS_PER_PAGE = 15;
 
   const availableTags = useMemo(() => {
@@ -79,12 +81,14 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
       if (filterMissing === 'meaning' && (w.meaning || w.viMeaning)) return false;
       if (filterMissing === 'example' && w.example) return false;
       if (filterMissing === 'phonetic' && w.phonetic) return false;
+      if (filterMissing === 'collocations' && w.collocations && w.collocations.length > 0) return false;
 
       if (!q) return true;
       return (
         w.word.toLowerCase().includes(q) ||
         (w.meaning && w.meaning.toLowerCase().includes(q)) ||
         (w.viMeaning && w.viMeaning.toLowerCase().includes(q)) ||
+        (w.collocations && w.collocations.join(' ').toLowerCase().includes(q)) ||
         (w.tags && w.tags.join(' ').toLowerCase().includes(q)) ||
         (w.wordType && w.wordType.toLowerCase().includes(q))
       );
@@ -123,9 +127,10 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
     setEditForm({
       word: word.word,
       phonetic: word.phonetic || '',
-      meaning: word.meaning,
+      meaning: word.meaning || '',
       viMeaning: word.viMeaning || '',
       example: word.example || '',
+      collocations: Array.isArray(word.collocations) ? word.collocations.join('\n') : (word.collocations || ''),
       wordType: word.wordType || '',
       tags: word.tags || [],
     });
@@ -136,6 +141,11 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
   const handleSave = (id) => {
     const originalWord = words.find((w) => w.id === id);
     if (originalWord) {
+      const parsedCollocations = (editForm.collocations || '')
+        .split(/[\n,;•·|]+/)
+        .map((c) => c.trim())
+        .filter(Boolean);
+
       updateWord({
         ...originalWord,
         word: editForm.word,
@@ -143,6 +153,7 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
         meaning: editForm.meaning,
         viMeaning: editForm.viMeaning,
         example: editForm.example,
+        collocations: parsedCollocations,
         wordType: editForm.wordType,
         tags: editForm.tags,
       });
@@ -221,6 +232,25 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
                 title="Nhập / Xuất dữ liệu"
               >
                 <Download size={16} />
+              </button>
+              <button 
+                onClick={() => setShowEnrichModal(true)}
+                className="btn btn-outline" 
+                style={{
+                  padding: '0.3rem 0.6rem',
+                  fontSize: '0.8rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  borderRadius: '8px',
+                  background: 'rgba(59, 130, 246, 0.12)',
+                  borderColor: 'var(--accent-secondary)',
+                  color: 'var(--accent-secondary)',
+                  fontWeight: 600
+                }} 
+                title="Tự động điền 3 Collocations, ví dụ và nghĩa tiếng Việt"
+              >
+                <Sparkles size={14} /> Điền dữ liệu
               </button>
             </div>
           </div>
@@ -344,6 +374,7 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
               }}
             >
               <option value="" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Dữ liệu: Đầy đủ/Tất cả</option>
+              <option value="collocations" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Thiếu Collocations</option>
               <option value="meaning" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Thiếu nghĩa</option>
               <option value="example" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Thiếu câu ví dụ</option>
               <option value="phonetic" style={{ background: 'var(--bg-dark)', color: 'var(--text-main)' }}>Thiếu phiên âm</option>
@@ -463,6 +494,14 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
                     />
                     <textarea
                       className="input-field"
+                      value={editForm.collocations}
+                      onChange={(e) => setEditForm({ ...editForm, collocations: e.target.value })}
+                      placeholder="3 Collocations tiếng Anh (mỗi cụm 1 dòng hoặc cách nhau dấu phẩy)"
+                      rows={2}
+                      style={{ resize: 'vertical' }}
+                    />
+                    <textarea
+                      className="input-field"
                       value={editForm.example}
                       onChange={(e) => setEditForm({ ...editForm, example: e.target.value })}
                       placeholder="Câu ví dụ"
@@ -554,6 +593,28 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
                           {formatLineBreaks(word.meaning)}
                         </p>
                       )}
+                      {word.collocations && word.collocations.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.35rem', margin: '0.25rem 0' }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                            <Layers size={11} /> Collocations:
+                          </span>
+                          {word.collocations.map((c, i) => (
+                            <span
+                              key={i}
+                              style={{
+                                fontSize: '0.72rem',
+                                padding: '0.1rem 0.45rem',
+                                background: 'rgba(16, 185, 129, 0.12)',
+                                color: 'var(--accent-success, #10b981)',
+                                borderRadius: '4px',
+                                fontWeight: 500,
+                              }}
+                            >
+                              {c}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       {word.example && (
                         <p className="preserve-newlines text-muted" style={{ fontStyle: 'italic', fontSize: '0.8rem' }}>
                           &ldquo;{formatLineBreaks(word.example)}&rdquo;
@@ -621,20 +682,11 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
                   key={idx}
                   onClick={() => typeof pageNum === 'number' && setCurrentPage(pageNum)}
                   disabled={pageNum === '...'}
+                  className={`btn ${activePage === pageNum ? 'btn-primary' : 'btn-outline'}`}
                   style={{
-                    background:
-                      pageNum === activePage
-                        ? 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))'
-                        : pageNum === '...'
-                          ? 'transparent'
-                          : 'rgba(128,128,128,0.06)',
-                    border: '1px solid var(--glass-border)',
-                    color: pageNum === activePage ? 'white' : 'var(--text-main)',
-                    padding: '0.35rem 0.7rem',
+                    padding: '0.35rem 0.6rem',
                     borderRadius: '8px',
-                    cursor: pageNum === '...' ? 'default' : 'pointer',
                     fontSize: '0.8rem',
-                    fontWeight: pageNum === activePage ? 700 : 500,
                     minWidth: '32px',
                     opacity: pageNum === '...' ? 0.6 : 1,
                   }}
@@ -678,6 +730,18 @@ const WordList = ({ words, settings, topics, folders = [], addTopic, addFolder, 
           importSnapshot={importSnapshot}
           getFullSnapshotForBackup={getFullSnapshotForBackup}
           onClose={() => setShowDataModal(false)}
+        />
+      )}
+
+      {showEnrichModal && (
+        <EnrichModal
+          isOpen={showEnrichModal}
+          onClose={() => setShowEnrichModal(false)}
+          words={words}
+          filteredWords={filteredWords}
+          onBatchUpdate={(updated) => {
+            if (batchUpdateWords) batchUpdateWords(updated);
+          }}
         />
       )}
     </div>

@@ -90,6 +90,7 @@ const DataModal = ({
         Type: w.wordType || '',
         'Meaning (EN)': w.meaning || '',
         'Meaning (VI)': w.viMeaning || '',
+        Collocations: (w.collocations || []).join('; '),
         Example: w.example || '',
         Tags: (w.tags || []).join(', '),
       };
@@ -120,8 +121,8 @@ const DataModal = ({
     }
 
     const headers = stripSRS
-      ? ['Word', 'Phonetic', 'Type', 'Meaning (EN)', 'Meaning (VI)', 'Example', 'Tags']
-      : ['Word', 'Phonetic', 'Type', 'Meaning (EN)', 'Meaning (VI)', 'Example', 'Tags', 'SRS Status', 'Repetition', 'Interval (Days)', 'E-Factor', 'Next Review Date', 'Last Reviewed'];
+      ? ['Word', 'Phonetic', 'Type', 'Meaning (EN)', 'Meaning (VI)', 'Collocations', 'Example', 'Tags']
+      : ['Word', 'Phonetic', 'Type', 'Meaning (EN)', 'Meaning (VI)', 'Collocations', 'Example', 'Tags', 'SRS Status', 'Repetition', 'Interval (Days)', 'E-Factor', 'Next Review Date', 'Last Reviewed'];
 
     const rows = dataToExport.map((w) => {
       const baseRow = [
@@ -130,6 +131,7 @@ const DataModal = ({
         w.wordType || '',
         w.meaning || '',
         w.viMeaning || '',
+        (w.collocations || []).join('; '),
         w.example || '',
         (w.tags || []).join(', '),
       ];
@@ -290,6 +292,12 @@ const DataModal = ({
               wordType: String(getVal(['type', 'word type', 'từ loại', 'loại từ'])).trim(),
               meaning: String(getVal(['meaning (en)', 'meaning', 'english', 'definition', 'định nghĩa', 'nghĩa tiếng anh'])).trim(),
               viMeaning: String(getVal(['meaning (vi)', 'vietnamese', 'vi', 'vimeaning', 'nghĩa tiếng việt', 'tiếng việt', 'nghĩa vi', 'dịch nghĩa', 'nghĩa'])).trim(),
+              collocations: getVal(['collocations', 'collocation', 'cụm từ', 'cụm từ đi kèm', 'colloc', 'phrases'])
+                ? String(getVal(['collocations', 'collocation', 'cụm từ', 'cụm từ đi kèm', 'colloc', 'phrases']))
+                    .split(/[\n,;•·|]+/)
+                    .map((c) => c.trim())
+                    .filter(Boolean)
+                : [],
               example: String(getVal(['example', 'examples', 'example chunks', 'ví dụ', 'câu ví dụ', 'sentence'])).trim(),
               tags: getVal(['tags', 'tag', 'chủ đề'])
                 ? String(getVal(['tags', 'tag', 'chủ đề']))
@@ -412,6 +420,12 @@ const DataModal = ({
               wordType: String(getVal(['type', 'word type', 'từ loại', 'loại từ'])).trim(),
               meaning: String(getVal(['meaning (en)', 'meaning', 'english', 'definition', 'định nghĩa', 'nghĩa tiếng anh'])).trim(),
               viMeaning: String(getVal(['meaning (vi)', 'vietnamese', 'vi', 'vimeaning', 'nghĩa tiếng việt', 'tiếng việt', 'nghĩa vi', 'dịch nghĩa', 'nghĩa'])).trim(),
+              collocations: getVal(['collocations', 'collocation', 'cụm từ', 'cụm từ đi kèm', 'colloc', 'phrases'])
+                ? String(getVal(['collocations', 'collocation', 'cụm từ', 'cụm từ đi kèm', 'colloc', 'phrases']))
+                    .split(/[\n,;•·|]+/)
+                    .map((c) => c.trim())
+                    .filter(Boolean)
+                : [],
               example: String(getVal(['example', 'examples', 'example chunks', 'ví dụ', 'câu ví dụ', 'sentence'])).trim(),
               tags: getVal(['tags', 'tag', 'chủ đề'])
                 ? String(getVal(['tags', 'tag', 'chủ đề']))

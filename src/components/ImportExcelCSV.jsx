@@ -19,11 +19,14 @@ import {
   ChevronsLeft,
   ChevronsRight
 } from 'lucide-react';
+import { enrichSingleWord } from '../utils/enrichVocab';
+import { normalizeCollocations } from '../utils/tags';
 
 const WORD_HEADERS = ['word', 'từ', 'từ vựng', 'vocab', 'term'];
 const VI_MEANING_HEADERS = ['vietnamese', 'vi', 'vimeaning', 'nghĩa tiếng việt', 'tiếng việt', 'nghĩa vi', 'dịch nghĩa', 'nghĩa', 'meaning (vi)'];
 const MEANING_HEADERS = ['meaning', 'english', 'definition', 'định nghĩa', 'nghĩa tiếng anh', 'english meaning', 'def', 'meaning (en)'];
 const PHONETIC_HEADERS = ['phonetic', 'pronunciation', 'phiên âm', 'phát âm', 'ipa'];
+const COLLOCATION_HEADERS = ['collocations', 'collocation', 'cụm từ', 'cụm từ đi kèm', 'colloc', 'phrases'];
 const EXAMPLE_HEADERS = ['example', 'examples', 'example chunks', 'sentence', 'ví dụ', 'câu ví dụ', 'câu'];
 const TAG_HEADERS = ['tags', 'tag', 'chủ đề'];
 const TYPE_HEADERS = ['type', 'word type', 'từ loại', 'loại từ'];
@@ -107,11 +110,11 @@ const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTa
 
   // Download sample CSV template with UTF-8 BOM
   const handleDownloadTemplate = () => {
-    const headers = ['Word', 'Phonetic', 'Vietnamese Meaning', 'English Definition', 'Example', 'Tags', 'SRS Status', 'Repetition', 'Interval (Days)', 'E-Factor', 'Next Review Date', 'Last Reviewed'];
+    const headers = ['Word', 'Phonetic', 'Vietnamese Meaning', 'English Definition', 'Collocations', 'Example', 'Tags', 'SRS Status', 'Repetition', 'Interval (Days)', 'E-Factor', 'Next Review Date', 'Last Reviewed'];
     const sampleData = [
-      ['apple', '/ˈæp.əl/', 'quả táo', 'A round fruit with red, green, or yellow skin and crisp white flesh', 'He ate a red apple.', 'Fruit', 'Chưa học', '0', '1', '2.5', '2026-08-11', ''],
-      ['benevolent', '/bəˈnev.əl.ənt/', 'nhân từ', 'Kind and helpful', 'A benevolent gentleman donated $5000 to charity.', 'Adjective', 'Thành thạo', '3', '15', '2.6', '2026-08-25', '2026-08-10'],
-      ['resilient', '', '', '', 'She is a resilient girl. (Meaning & phonetic will auto-fill)', '', 'Chưa học', '0', '1', '2.5', '', '']
+      ['apple', '/ˈæp.əl/', 'quả táo', 'A round fruit with red, green, or yellow skin and crisp white flesh', 'red apple; apple pie; fresh apple', 'He ate a red apple.', 'Fruit', 'Chưa học', '0', '1', '2.5', '2026-08-11', ''],
+      ['benevolent', '/bəˈnev.əl.ənt/', 'nhân từ', 'Kind and helpful', 'benevolent leader; benevolent smile; benevolent organization', 'A benevolent gentleman donated $5000 to charity.', 'Adjective', 'Thành thạo', '3', '15', '2.6', '2026-08-25', '2026-08-10'],
+      ['resilient', '', '', '', '', 'She is a resilient girl. (Meaning, collocations & phonetic will auto-fill)', '', 'Chưa học', '0', '1', '2.5', '', '']
     ];
     
     const csvContent = "\uFEFF" + [headers, ...sampleData].map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -167,6 +170,7 @@ const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTa
         let phoneticIdx = -1;
         let viIdx = -1;
         let enIdx = -1;
+        let collocationIdx = -1;
         let exampleIdx = -1;
         let tagIdx = -1;
         let typeIdx = -1;
@@ -181,6 +185,7 @@ const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTa
           else if (PHONETIC_HEADERS.includes(header)) phoneticIdx = index;
           else if (VI_MEANING_HEADERS.includes(header)) viIdx = index;
           else if (MEANING_HEADERS.includes(header)) enIdx = index;
+          else if (COLLOCATION_HEADERS.includes(header)) collocationIdx = index;
           else if (EXAMPLE_HEADERS.includes(header)) exampleIdx = index;
           else if (TAG_HEADERS.includes(header)) tagIdx = index;
           else if (TYPE_HEADERS.includes(header)) typeIdx = index;
@@ -213,6 +218,7 @@ const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTa
           const rawPhonetic = phoneticIdx !== -1 && row[phoneticIdx] ? String(row[phoneticIdx]).trim() : '';
           const rawVi = viIdx !== -1 && row[viIdx] ? String(row[viIdx]).trim() : '';
           const rawEn = enIdx !== -1 && row[enIdx] ? String(row[enIdx]).trim() : '';
+          const rawCollocations = collocationIdx !== -1 && row[collocationIdx] ? normalizeCollocations(row[collocationIdx]) : [];
           const rawExample = exampleIdx !== -1 && row[exampleIdx] ? String(row[exampleIdx]).trim() : '';
           const rawTags = tagIdx !== -1 && row[tagIdx] ? String(row[tagIdx]).split(',').map(t => t.trim()).filter(Boolean) : [];
           const rawType = typeIdx !== -1 && row[typeIdx] ? String(row[typeIdx]).trim() : '';
@@ -272,6 +278,7 @@ const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTa
             phonetic: rawPhonetic,
             viMeaning: rawVi,
             meaning: rawEn,
+            collocations: rawCollocations,
             example: rawExample,
             tags: rawTags,
             wordType: rawType,
@@ -401,27 +408,32 @@ const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTa
       let finalViMeaning = currentItem.viMeaning;
       let finalPhonetic = currentItem.phonetic;
       let finalExample = currentItem.example;
+      let finalCollocations = currentItem.collocations || [];
       let finalTags = currentItem.tags;
       let finalType = currentItem.wordType;
 
       // Auto-fetch if enabled and fields are missing
       if (autoFetch && (!isLiveDuplicate || updateDuplicates)) {
-        let isFetchingNeeded = !finalMeaning || !finalViMeaning || !finalPhonetic;
-        
-        if (isFetchingNeeded) {
-          // Fetch from English dictionary
-          const dictData = await fetchFromDictionary(currentItem.word);
-          if (dictData) {
-            if (!finalMeaning) finalMeaning = dictData.fetchedMeaning;
-            if (!finalExample) finalExample = dictData.fetchedExample;
-            if (!finalPhonetic) finalPhonetic = dictData.fetchedPhonetic;
-          }
+        const enriched = await enrichSingleWord({
+          word: currentItem.word,
+          phonetic: finalPhonetic,
+          meaning: finalMeaning,
+          viMeaning: finalViMeaning,
+          example: finalExample,
+          collocations: finalCollocations,
+        }, {
+          fillCollocations: finalCollocations.length === 0,
+          fillExample: !finalExample,
+          fillViMeaning: !finalViMeaning,
+          fillMeaning: !finalMeaning,
+          fillPhonetic: !finalPhonetic,
+        });
 
-          // Translate to Vietnamese
-          if (!finalViMeaning) {
-            finalViMeaning = await translateToVi(currentItem.word);
-          }
-        }
+        finalMeaning = enriched.meaning || finalMeaning;
+        finalViMeaning = enriched.viMeaning || finalViMeaning;
+        finalPhonetic = enriched.phonetic || finalPhonetic;
+        finalExample = enriched.example || finalExample;
+        finalCollocations = enriched.collocations || finalCollocations;
       }
 
       if (isLiveDuplicate && updateDuplicates) {
@@ -436,6 +448,7 @@ const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTa
           meaning: finalMeaning || existingWord.meaning,
           viMeaning: finalViMeaning || existingWord.viMeaning,
           example: finalExample || existingWord.example,
+          collocations: (finalCollocations && finalCollocations.length > 0) ? finalCollocations : existingWord.collocations,
           tags: (finalTags && finalTags.length > 0) ? finalTags : existingWord.tags,
           wordType: finalType || existingWord.wordType,
           repetition: (currentItem.repetition !== undefined && currentItem.repetition > 0) ? currentItem.repetition : existingWord.repetition,
@@ -465,6 +478,7 @@ const ImportExcelCSV = ({ words = [], onUpdateWord, onAdd, onAddWords, onCloseTa
           meaning: finalMeaning,
           viMeaning: finalViMeaning,
           example: finalExample,
+          collocations: finalCollocations,
           tags: finalTags,
           wordType: finalType,
           ...srsFields,

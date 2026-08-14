@@ -5,6 +5,7 @@ import { getInitialSRSData } from '../utils/srs';
 import { Search, Plus, Loader2, FileSpreadsheet, Zap, Bot } from 'lucide-react';
 import ImportExcelCSV from './ImportExcelCSV';
 import { autoTagWords } from '../utils/aiTagger';
+import { enrichSingleWord } from '../utils/enrichVocab';
 
 const AddWord = ({ words = [], settings, topics = [], addTopic, onUpdateWord, onAdd, onAddWords }) => {
   const [activeAddTab, setActiveAddTab] = useState('manual');
@@ -12,6 +13,7 @@ const AddWord = ({ words = [], settings, topics = [], addTopic, onUpdateWord, on
   const [meaning, setMeaning] = useState('');
   const [viMeaning, setViMeaning] = useState('');
   const [example, setExample] = useState('');
+  const [collocations, setCollocations] = useState('');
   const [quickText, setQuickText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -226,34 +228,31 @@ const AddWord = ({ words = [], settings, topics = [], addTopic, onUpdateWord, on
     const pendingSugg = [];
 
     for (const currentWord of uniqueWordsToAdd) {
-      let finalMeaning = meaning.trim();
-      let finalViMeaning = viMeaning.trim();
-      let finalExample = example.trim();
-      let finalPhonetic = '';
+      let finalCollocations = collocations
+        ? collocations.split(/[\n,;•·|]+/).map(c => c.trim()).filter(Boolean)
+        : [];
 
-      const dictData = await fetchFromDictionary(currentWord);
-      if (dictData) {
-        if (!finalMeaning) finalMeaning = dictData.fetchedMeaning;
-        if (!finalExample) finalExample = dictData.fetchedExample;
-        finalPhonetic = dictData.fetchedPhonetic;
-      }
-
-      if (!finalViMeaning) {
-        finalViMeaning = await translateToVi(currentWord);
-      }
-
-      const newWordObj = {
+      const wordDraft = {
         id: uuidv4(),
         word: currentWord,
-        phonetic: finalPhonetic,
-        meaning: finalMeaning,
-        viMeaning: finalViMeaning,
-        example: finalExample,
+        phonetic: '',
+        meaning: meaning.trim(),
+        viMeaning: viMeaning.trim(),
+        example: example.trim(),
+        collocations: finalCollocations,
         ...getInitialSRSData(),
         dateAdded: new Date().getTime()
       };
 
-      finalWordsToSave.push(newWordObj);
+      const enrichedWord = await enrichSingleWord(wordDraft, {
+        fillCollocations: finalCollocations.length === 0,
+        fillExample: !wordDraft.example,
+        fillViMeaning: !wordDraft.viMeaning,
+        fillMeaning: !wordDraft.meaning,
+        fillPhonetic: true,
+      });
+
+      finalWordsToSave.push(enrichedWord);
     }
 
     if (settings?.geminiApiKey && finalWordsToSave.length > 0) {
@@ -379,34 +378,25 @@ const AddWord = ({ words = [], settings, topics = [], addTopic, onUpdateWord, on
     setIsLoading(true);
     try {
       const newWordsList = await Promise.all(reviewWordsList.map(async (item) => {
-        let finalMeaning = '';
-        let finalViMeaning = item.viMeaning;
-        let finalExample = item.example || '';
-        let finalPhonetic = '';
-
-        const dictData = await fetchFromDictionary(item.word);
-        if (dictData) {
-          finalMeaning = dictData.fetchedMeaning;
-          if (!finalExample) {
-            finalExample = dictData.fetchedExample;
-          }
-          finalPhonetic = dictData.fetchedPhonetic;
-        }
-
-        if (!finalViMeaning) {
-          finalViMeaning = await translateToVi(item.word);
-        }
-
-        return {
+        const wordDraft = {
           id: uuidv4(),
           word: item.word,
-          phonetic: finalPhonetic,
-          meaning: finalMeaning,
-          viMeaning: finalViMeaning,
-          example: finalExample,
+          phonetic: '',
+          meaning: '',
+          viMeaning: item.viMeaning || '',
+          example: item.example || '',
+          collocations: [],
           ...getInitialSRSData(),
           dateAdded: new Date().getTime()
         };
+
+        return await enrichSingleWord(wordDraft, {
+          fillCollocations: true,
+          fillExample: !wordDraft.example,
+          fillViMeaning: !wordDraft.viMeaning,
+          fillMeaning: true,
+          fillPhonetic: true,
+        });
       }));
 
       let pendingSugg = [];
@@ -583,7 +573,8 @@ const AddWord = ({ words = [], settings, topics = [], addTopic, onUpdateWord, on
           <input type="text" className="input-field" value={word} onChange={e => setWord(e.target.value)} placeholder="Từ vựng (phân tách bằng dấu phẩy nếu thêm nhiều từ) *" required />
           <input type="text" className="input-field" value={viMeaning} onChange={e => setViMeaning(e.target.value)} placeholder="Nghĩa tiếng Việt (tự dịch nếu để trống)" />
           <input type="text" className="input-field" value={meaning} onChange={e => setMeaning(e.target.value)} placeholder="Định nghĩa tiếng Anh (tự tra cứu nếu để trống)" />
-          <input type="text" className="input-field" value={example} onChange={e => setExample(e.target.value)} placeholder="Ví dụ đặt câu (tùy chọn)" />
+          <input type="text" className="input-field" value={collocations} onChange={e => setCollocations(e.target.value)} placeholder="3 Collocations tiếng Anh (tự tìm nếu để trống)" />
+          <input type="text" className="input-field" value={example} onChange={e => setExample(e.target.value)} placeholder="Ví dụ đặt câu (tự tìm nếu để trống)" style={{ gridColumn: '1/-1' }} />
 
           {error && <div style={{ gridColumn: '1/-1', color: 'var(--accent-danger)', padding: '0.4rem 0.75rem', background: 'rgba(239,68,68,0.1)', borderRadius: '8px', fontSize: '0.8rem' }}>{error}</div>}
           {success && <div style={{ gridColumn: '1/-1', color: 'var(--accent-success)', padding: '0.4rem 0.75rem', background: 'rgba(16,185,129,0.1)', borderRadius: '8px', fontSize: '0.8rem' }}>{success}</div>}

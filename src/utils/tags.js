@@ -94,6 +94,20 @@ export const normalizeTag = (tag) => {
   return "Từ vựng chung & khái niệm trừu tượng";
 };
 
+export const normalizeCollocations = (collocations) => {
+  if (!collocations) return [];
+  if (Array.isArray(collocations)) {
+    return collocations.map(c => String(c).trim()).filter(Boolean);
+  }
+  if (typeof collocations === 'string') {
+    return collocations
+      .split(/[\n,;•·|]+/)
+      .map(c => c.trim())
+      .filter(Boolean);
+  }
+  return [];
+};
+
 export const normalizeWordTags = (word) => {
   if (!word) return word;
   const rawTags = Array.isArray(word.tags) ? word.tags : [];
@@ -126,6 +140,7 @@ export const normalizeWordTags = (word) => {
 
   return {
     ...word,
+    collocations: normalizeCollocations(word.collocations),
     wordType: extractedWordType,
     tags: Array.from(normalizedTopicSet)
   };

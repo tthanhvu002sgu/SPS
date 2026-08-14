@@ -38,6 +38,7 @@ function App() {
     addWord,
     addWords,
     updateWord,
+    batchUpdateWords,
     updateSettings,
     addTopic,
     addFolder,
@@ -132,6 +133,7 @@ function App() {
                     updateFolder={updateFolder}
                     deleteFolder={deleteFolder}
                     updateWord={updateWord}
+                    batchUpdateWords={batchUpdateWords}
                     deleteWord={deleteWord}
                     addWord={addWord}
                     addWords={addWords}
