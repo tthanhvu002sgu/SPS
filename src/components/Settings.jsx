@@ -1,7 +1,6 @@
-import React, { useRef } from 'react';
-import { Settings as SettingsIcon, Save, Download, Upload, RotateCcw, Trash2, Palette, BookOpen, FileSpreadsheet } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import { v4 as uuidv4 } from 'uuid';
+import React from 'react';
+import { Settings as SettingsIcon, Save, RotateCcw, Trash2, Palette, BookOpen } from 'lucide-react';
+import { STORAGE_KEYS, safeGetItem } from '../utils/storage';
 
 const Settings = ({
   words,
@@ -67,8 +66,8 @@ const Settings = ({
 
 
   const handleRestoreAutoBackup = () => {
-    const fullStr = localStorage.getItem('spacedrep_full_backup');
-    const backupStr = fullStr || localStorage.getItem('spacedrep_vocab_backup');
+    const fullStr = safeGetItem(STORAGE_KEYS.FULL_BACKUP);
+    const backupStr = fullStr || safeGetItem(STORAGE_KEYS.LEGACY_BACKUP);
     if (!backupStr) {
       alert('Không tìm thấy bản sao lưu tự động.');
       return;

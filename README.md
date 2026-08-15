@@ -36,7 +36,7 @@ npm run deploy   # gh-pages (base: /SPS/)
 ```
 src/
   App.jsx              # shell, nav desktop/mobile, lazy tabs
-  hooks/useVocab.js    # state + localStorage + backup/import + batch update
+  hooks/useVocab.js    # state + safe storage + backup/import + batch update
   components/
     StudySession.jsx   # dashboard + session flashcard/sentence + collocations view
     WordList.jsx       # library + filters + missing collocations filter
@@ -45,12 +45,12 @@ src/
     ImportExcelCSV.jsx # dynamic xlsx import kèm collocations
     Settings.jsx
     Dashboard.jsx
-  utils/srs.js, tags.js, aiTagger.js, enrichVocab.js
+  utils/srs.js, tags.js, aiTagger.js, enrichVocab.js, storage.js
 public/
   manifest.webmanifest, sw.js, logo.svg
 ```
 
-- Data keys: `spacedrep_vocab_data`, `spacedrep_settings`, `spacedrep_review_history`, `spacedrep_topics`, backups.
+- Data keys: `spacedrep_vocab_data`, `spacedrep_settings`, `spacedrep_review_history`, `spacedrep_topics`, `spacedrep_folders`, `spacedrep_full_backup`.
 - Theme: `data-theme="sepia" | "dark"` trên `<html>`.
 
 ## 3. Các component
@@ -58,14 +58,26 @@ public/
 | Module | Vai trò |
 |--------|---------|
 | `useVocab` | CRUD từ, settings, history, snapshot import/export, streak, batchUpdate |
+| `storage.js` | Cơ chế an toàn đọc/ghi localStorage, tự động giải phóng bộ nhớ khi đầy quota, chống crash app |
 | `StudySession` | UI học, filter tag, undo, sentence skip/limit, hiển thị collocations |
 | `WordList` + `AddWord` | Thư viện & nhập từ |
 | `EnrichModal` | Modal làm giàu dữ liệu tự động hàng loạt (3 Collocations, ví dụ, nghĩa TV) |
 | `ImportExcelCSV` | Parse Excel/CSV (lazy xlsx) hỗ trợ cột Collocations & auto-fetch |
-| `Settings` | Theme, SRS, Gemini, data tools |
+| `Settings` | Theme, SRS, Gemini, data tools & khôi phục backup |
 | `Dashboard` | Streak, mastered, accuracy 7 ngày |
 
 ## 4. Các task đã làm
+
+### [2026-08-15] Fix QuotaExceededError in LocalStorage & Eliminate Redundant Backups `(FAST)`
+- **Lane / Mode:** FEATURE FAST
+- **Tóm tắt:** Khắc phục triệt để lỗi `QuotaExceededError` làm crash React khi ghi dữ liệu/backup vào LocalStorage khi kích thước thư viện từ vựng tăng cao.
+- **Thay đổi chính:**
+  - `storage.js`: Tạo module quản lý lưu trữ an toàn `safeSetItem`, `safeGetItem`, `safeRemoveItem`, `safeParse` với cơ chế bắt lỗi `QuotaExceededError`. Khi bộ nhớ bị đầy trong lúc lưu dữ liệu chính, tự động dọn dẹp các key sao lưu trùng lặp/bộ nhớ đệm để bảo toàn tuyệt đối dữ liệu học từ vựng.
+  - `useVocab.js`: Loại bỏ việc ghi kép 2 bản backup (`spacedrep_vocab_backup` và `spacedrep_full_backup`) cùng lúc; tự động giải phóng key legacy `spacedrep_vocab_backup` khi khởi động; bọc toàn bộ thao tác lưu qua `safeSetItem` ngăn ngừa hoàn toàn crash app.
+  - `Settings.jsx`: Cập nhật `handleRestoreAutoBackup` tương thích an toàn với cả `spacedrep_full_backup` và legacy fallback qua `safeGetItem`.
+- **Files / areas chạm:** `src/utils/storage.js`, `src/hooks/useVocab.js`, `src/components/Settings.jsx`, `README.md`
+- **Ảnh hưởng README:** §2, §3, §4
+- **Verify:** `npm run build` thành công, kiểm thử unit test giả lập giới hạn quota `test-storage.mjs` PASS 100%.
 
 ### [2026-08-14] Integrate Datamuse 3 English Collocations, Tatoeba Examples & Batch Vocabulary Enrichment `(FULL)`
 - **Lane / Mode:** FEATURE FULL

@@ -1,14 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { DEFAULT_TOPICS, normalizeWordTags } from '../utils/tags';
-
-const STORAGE_KEY = 'spacedrep_vocab_data';
-const SETTINGS_KEY = 'spacedrep_settings';
-const HISTORY_KEY = 'spacedrep_review_history';
-const TOPICS_KEY = 'spacedrep_topics';
-const FOLDERS_KEY = 'spacedrep_folders';
-const BACKUP_KEY = 'spacedrep_vocab_backup';
-const BACKUP_DATE_KEY = 'spacedrep_last_backup_date';
-const FULL_BACKUP_KEY = 'spacedrep_full_backup';
+import { normalizeWordTags } from '../utils/tags';
+import {
+  STORAGE_KEYS,
+  safeGetItem,
+  safeSetItem,
+  safeRemoveItem,
+  safeParse,
+} from '../utils/storage';
 
 const DEFAULT_SMART_FOLDERS = [
   { id: 'folder_smart_life', name: 'Đời sống & Giao tiếp', isDefault: false, wordIds: [], tags: ['Đời sống & giao tiếp'] },
@@ -67,15 +65,6 @@ const calculateStreak = (reviewHistory) => {
   }
 
   return streak;
-};
-
-const safeParse = (str, fallback) => {
-  if (!str) return fallback;
-  try {
-    return JSON.parse(str);
-  } catch {
-    return fallback;
-  }
 };
 
 const resetReviewedIfNewDay = (words) => {
@@ -170,25 +159,28 @@ export const useVocab = () => {
 
   // Load from localStorage immediately — never block on network
   useEffect(() => {
-    const storedWords = safeParse(localStorage.getItem(STORAGE_KEY), []);
+    const storedWords = safeParse(safeGetItem(STORAGE_KEYS.WORDS), []);
     const storedSettings = {
       ...DEFAULT_SETTINGS,
-      ...safeParse(localStorage.getItem(SETTINGS_KEY), {}),
+      ...safeParse(safeGetItem(STORAGE_KEYS.SETTINGS), {}),
     };
-    const storedFoldersRaw = safeParse(localStorage.getItem(FOLDERS_KEY), null);
-    const storedHistory = safeParse(localStorage.getItem(HISTORY_KEY), {});
+    const storedFoldersRaw = safeParse(safeGetItem(STORAGE_KEYS.FOLDERS), null);
+    const storedHistory = safeParse(safeGetItem(STORAGE_KEYS.HISTORY), {});
 
-    const { words: dayResetWords, changed } = resetReviewedIfNewDay(storedWords);
+    // Clean up legacy redundant backup key to reclaim space if present
+    safeRemoveItem(STORAGE_KEYS.LEGACY_BACKUP);
+
+    const { words: dayResetWords } = resetReviewedIfNewDay(storedWords);
     const normalizedWords = dayResetWords.map((w) => normalizeWordTags(w));
     const initialUsedTags = getUsedTags(normalizedWords);
-    localStorage.setItem(TOPICS_KEY, JSON.stringify(initialUsedTags));
+    safeSetItem(STORAGE_KEYS.TOPICS, JSON.stringify(initialUsedTags));
     
     let storedFolders = [];
     const baseDefault = { id: 'default', name: 'Default', isDefault: true, wordIds: [], tags: [] };
     
     if (!storedFoldersRaw) {
       storedFolders = [baseDefault, ...DEFAULT_SMART_FOLDERS];
-      localStorage.setItem(FOLDERS_KEY, JSON.stringify(storedFolders));
+      safeSetItem(STORAGE_KEYS.FOLDERS, JSON.stringify(storedFolders));
     } else {
       storedFolders = [...storedFoldersRaw];
       let hasChanges = false;
@@ -200,7 +192,7 @@ export const useVocab = () => {
         }
       });
       if (hasChanges) {
-        localStorage.setItem(FOLDERS_KEY, JSON.stringify(storedFolders));
+        safeSetItem(STORAGE_KEYS.FOLDERS, JSON.stringify(storedFolders));
       }
     }
 
@@ -220,7 +212,7 @@ export const useVocab = () => {
         }
       });
       if (Object.keys(initialHistory).length > 0) {
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(initialHistory));
+        safeSetItem(STORAGE_KEYS.HISTORY, JSON.stringify(initialHistory));
       }
     }
 
@@ -235,15 +227,14 @@ export const useVocab = () => {
     // Apply theme ASAP
     document.documentElement.setAttribute('data-theme', storedSettings.theme || 'sepia');
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedWords));
+    safeSetItem(STORAGE_KEYS.WORDS, JSON.stringify(normalizedWords), true);
 
-    // Daily full backup (local)
+    // Daily full backup (local) — single structured backup, never duplicate write
     const todayDateStr = new Date().toISOString().split('T')[0];
-    const lastBackupDate = localStorage.getItem(BACKUP_DATE_KEY);
+    const lastBackupDate = safeGetItem(STORAGE_KEYS.BACKUP_DATE);
     if (lastBackupDate !== todayDateStr && dayResetWords.length > 0) {
-      localStorage.setItem(BACKUP_KEY, JSON.stringify(dayResetWords));
-      localStorage.setItem(
-        FULL_BACKUP_KEY,
+      const backupSaved = safeSetItem(
+        STORAGE_KEYS.FULL_BACKUP,
         JSON.stringify({
           version: 2,
           exportedAt: new Date().toISOString(),
@@ -254,7 +245,9 @@ export const useVocab = () => {
           reviewHistory: initialHistory,
         })
       );
-      localStorage.setItem(BACKUP_DATE_KEY, todayDateStr);
+      if (backupSaved) {
+        safeSetItem(STORAGE_KEYS.BACKUP_DATE, todayDateStr);
+      }
     }
 
     // Background VI fill — non-blocking
@@ -290,15 +283,11 @@ export const useVocab = () => {
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(words));
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-        localStorage.setItem(TOPICS_KEY, JSON.stringify(topics));
-        if (folders.length > 0) {
-          localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders));
-        }
-      } catch (e) {
-        console.error('localStorage save failed', e);
+      safeSetItem(STORAGE_KEYS.WORDS, JSON.stringify(words), true);
+      safeSetItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      safeSetItem(STORAGE_KEYS.TOPICS, JSON.stringify(topics));
+      if (folders.length > 0) {
+        safeSetItem(STORAGE_KEYS.FOLDERS, JSON.stringify(folders));
       }
     }, 300);
 
@@ -329,11 +318,7 @@ export const useVocab = () => {
   const addFolder = useCallback((newFolder) => {
     setFolders(prev => {
       const next = [...prev, newFolder];
-      try {
-        localStorage.setItem(FOLDERS_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.error('Lỗi lưu folder:', e);
-      }
+      safeSetItem(STORAGE_KEYS.FOLDERS, JSON.stringify(next));
       return next;
     });
   }, []);
@@ -341,11 +326,7 @@ export const useVocab = () => {
   const updateFolder = useCallback((updatedFolder) => {
     setFolders(prev => {
       const next = prev.map(f => f.id === updatedFolder.id ? updatedFolder : f);
-      try {
-        localStorage.setItem(FOLDERS_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.error('Lỗi cập nhật folder:', e);
-      }
+      safeSetItem(STORAGE_KEYS.FOLDERS, JSON.stringify(next));
       return next;
     });
   }, []);
@@ -353,11 +334,7 @@ export const useVocab = () => {
   const deleteFolder = useCallback((id) => {
     setFolders(prev => {
       const next = prev.filter(f => f.id !== id);
-      try {
-        localStorage.setItem(FOLDERS_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.error('Lỗi xóa folder:', e);
-      }
+      safeSetItem(STORAGE_KEYS.FOLDERS, JSON.stringify(next));
       return next;
     });
   }, []);
@@ -399,7 +376,7 @@ export const useVocab = () => {
     if (Array.isArray(importedWords)) {
       const normalized = importedWords.map((w) => normalizeWordTags(w));
       setWords(normalized);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+      safeSetItem(STORAGE_KEYS.WORDS, JSON.stringify(normalized), true);
     }
   }, []);
 
@@ -439,13 +416,13 @@ export const useVocab = () => {
       if (incomingTopics) setTopics(incomingTopics);
       if (incomingFolders) {
         setFolders(incomingFolders);
-        localStorage.setItem(FOLDERS_KEY, JSON.stringify(incomingFolders));
+        safeSetItem(STORAGE_KEYS.FOLDERS, JSON.stringify(incomingFolders));
       }
       if (incomingHistory) {
         setReviewHistory(incomingHistory);
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(incomingHistory));
+        safeSetItem(STORAGE_KEYS.HISTORY, JSON.stringify(incomingHistory));
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedIncoming));
+      safeSetItem(STORAGE_KEYS.WORDS, JSON.stringify(normalizedIncoming), true);
       return { added: normalizedIncoming.length, updated: 0, total: normalizedIncoming.length };
     }
 
@@ -513,7 +490,7 @@ export const useVocab = () => {
             };
           }
         });
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(merged));
+        safeSetItem(STORAGE_KEYS.HISTORY, JSON.stringify(merged));
         return merged;
       });
     }
@@ -564,7 +541,7 @@ export const useVocab = () => {
           : [wordId],
       };
       const updated = { ...prev, [todayStr]: newDayData };
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+      safeSetItem(STORAGE_KEYS.HISTORY, JSON.stringify(updated));
       return updated;
     });
   }, []);
@@ -582,7 +559,7 @@ export const useVocab = () => {
         reviewedWords: (dayData.reviewedWords || []).filter((id) => id !== wordId),
       };
       const updated = { ...prev, [todayStr]: newDayData };
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+      safeSetItem(STORAGE_KEYS.HISTORY, JSON.stringify(updated));
       return updated;
     });
   }, []);
