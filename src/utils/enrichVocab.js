@@ -13,8 +13,11 @@ const STOPWORDS = new Set([
   'like', 'much', 'many', 'well', 'back', 'even', 'only', 'new', 'now', 'way', 'may', 'might'
 ]);
 
+const API_TIMEOUT_MS = 2800; // 2.8s timeout per request to prevent hanging workers
+
 /**
  * Fetch top 3 authentic English collocations from Datamuse API (COCA & Google N-Grams corpus)
+ * Uses max=8 for ultra-fast response times & lightweight JSON payload
  */
 export const fetchCollocations = async (word) => {
   if (!word || typeof word !== 'string') return [];
@@ -23,10 +26,10 @@ export const fetchCollocations = async (word) => {
 
   try {
     const [jjaRes, jjbRes, bgaRes, bgbRes] = await Promise.all([
-      axios.get(`https://api.datamuse.com/words?rel_jja=${encodeURIComponent(cleanWord)}&md=p`).catch(() => ({ data: [] })),
-      axios.get(`https://api.datamuse.com/words?rel_jjb=${encodeURIComponent(cleanWord)}&md=p`).catch(() => ({ data: [] })),
-      axios.get(`https://api.datamuse.com/words?rel_bga=${encodeURIComponent(cleanWord)}&md=p`).catch(() => ({ data: [] })),
-      axios.get(`https://api.datamuse.com/words?rel_bgb=${encodeURIComponent(cleanWord)}&md=p`).catch(() => ({ data: [] })),
+      axios.get(`https://api.datamuse.com/words?rel_jja=${encodeURIComponent(cleanWord)}&max=8&md=p`, { timeout: API_TIMEOUT_MS }).catch(() => ({ data: [] })),
+      axios.get(`https://api.datamuse.com/words?rel_jjb=${encodeURIComponent(cleanWord)}&max=8&md=p`, { timeout: API_TIMEOUT_MS }).catch(() => ({ data: [] })),
+      axios.get(`https://api.datamuse.com/words?rel_bga=${encodeURIComponent(cleanWord)}&max=8&md=p`, { timeout: API_TIMEOUT_MS }).catch(() => ({ data: [] })),
+      axios.get(`https://api.datamuse.com/words?rel_bgb=${encodeURIComponent(cleanWord)}&max=8&md=p`, { timeout: API_TIMEOUT_MS }).catch(() => ({ data: [] })),
     ]);
 
     const jja = jjaRes.data || [];
@@ -94,7 +97,8 @@ export const translateToVi = async (text) => {
   if (!text || !text.trim()) return '';
   try {
     const res = await axios.get(
-      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(text.trim())}`
+      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(text.trim())}`,
+      { timeout: API_TIMEOUT_MS }
     );
     if (res.data && res.data[0]) {
       return res.data[0].map(item => item[0]).filter(Boolean).join('');
@@ -109,35 +113,24 @@ export const translateToVi = async (text) => {
 /**
  * Fetch 1 authentic example sentence from Tatoeba Open Bilingual Corpus or Free Dictionary API
  */
-export const fetchExampleSentence = async (word) => {
+export const fetchExampleSentence = async (word, existingExample = '') => {
   if (!word || typeof word !== 'string') return '';
   const cleanWord = word.trim();
   if (!cleanWord) return '';
 
   try {
-    // 1. Try Tatoeba with direct Vietnamese translation
-    const tatoebaViUrl = `https://tatoeba.org/en/api_v0/search?from=eng&to=vie&query=${encodeURIComponent(cleanWord)}`;
-    const tatoebaRes = await axios.get(tatoebaViUrl).catch(() => null);
-    
-    if (tatoebaRes && tatoebaRes.data && tatoebaRes.data.results && tatoebaRes.data.results.length > 0) {
-      const match = tatoebaRes.data.results.find(
-        r => r.translations && r.translations.some(t => t.length > 0 && t[0].lang === 'vie')
-      );
-      if (match) {
-        const vie = match.translations.flat().find(t => t.lang === 'vie');
-        const enSentence = match.text.trim();
-        const viSentence = vie ? vie.text.trim() : '';
-        return viSentence ? `${enSentence} (${viSentence})` : enSentence;
-      }
+    // 1. If we already got an English example sentence (e.g. from Dictionary API), translate it directly
+    if (existingExample && existingExample.trim()) {
+      const viEx = await translateToVi(existingExample.trim());
+      return viEx ? `${existingExample.trim()} (${viEx})` : existingExample.trim();
     }
 
-    // 2. Try Tatoeba English-only search + auto-translate sentence
+    // 2. Try Tatoeba English search + auto-translate
     const tatoebaEnUrl = `https://tatoeba.org/en/api_v0/search?from=eng&query=${encodeURIComponent(cleanWord)}`;
-    const tatoebaEnRes = await axios.get(tatoebaEnUrl).catch(() => null);
+    const tatoebaEnRes = await axios.get(tatoebaEnUrl, { timeout: API_TIMEOUT_MS }).catch(() => null);
     if (tatoebaEnRes && tatoebaEnRes.data && tatoebaEnRes.data.results && tatoebaEnRes.data.results.length > 0) {
-      // Find a concise sentence containing the word (between 20 and 150 characters)
       const suitable = tatoebaEnRes.data.results.find(
-        r => r.text && r.text.length >= 20 && r.text.length <= 150 && r.text.toLowerCase().includes(cleanWord.toLowerCase())
+        r => r.text && r.text.length >= 20 && r.text.length <= 140 && r.text.toLowerCase().includes(cleanWord.toLowerCase())
       ) || tatoebaEnRes.data.results[0];
 
       if (suitable && suitable.text) {
@@ -148,7 +141,7 @@ export const fetchExampleSentence = async (word) => {
     }
 
     // 3. Fallback: Try Free Dictionary API
-    const dictRes = await axios.get(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(cleanWord)}`).catch(() => null);
+    const dictRes = await axios.get(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(cleanWord)}`, { timeout: API_TIMEOUT_MS }).catch(() => null);
     if (dictRes && dictRes.data && dictRes.data[0] && dictRes.data[0].meanings) {
       for (const meaning of dictRes.data[0].meanings) {
         for (const def of meaning.definitions || []) {
@@ -169,13 +162,13 @@ export const fetchExampleSentence = async (word) => {
 };
 
 /**
- * Fetch phonetic and English definition from Free Dictionary API
+ * Fetch phonetic, English definition and example sentence from Free Dictionary API in a single request
  */
 export const fetchDictionaryDetails = async (word) => {
   if (!word) return { phonetic: '', meaning: '', example: '' };
   try {
-    const res = await axios.get(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.trim())}`);
-    const data = res.data[0];
+    const res = await axios.get(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.trim())}`, { timeout: API_TIMEOUT_MS });
+    const data = res.data && res.data[0];
     if (!data) return { phonetic: '', meaning: '', example: '' };
 
     let phonetic = data.phonetic || '';
@@ -187,11 +180,11 @@ export const fetchDictionaryDetails = async (word) => {
     let meaning = '';
     let example = '';
     if (data.meanings && data.meanings.length > 0) {
-      meaning = data.meanings[0].definitions[0]?.definition || '';
+      meaning = data.meanings[0].definitions?.[0]?.definition || '';
       for (const m of data.meanings) {
         for (const def of m.definitions || []) {
           if (def.example && !example) {
-            example = def.example;
+            example = def.example.trim();
           }
         }
       }
@@ -204,7 +197,7 @@ export const fetchDictionaryDetails = async (word) => {
 };
 
 /**
- * Fetch all missing information for a single word
+ * Fetch all missing information for a single word using an optimized parallel pipeline
  */
 export const enrichSingleWord = async (wordObj, options = {}) => {
   const {
@@ -223,68 +216,69 @@ export const enrichSingleWord = async (wordObj, options = {}) => {
 
   // 1. Collocations
   const needCollocations = fillCollocations && (forceOverwrite || !result.collocations || result.collocations.length === 0);
-  let collocationsPromise = Promise.resolve(result.collocations || []);
-  if (needCollocations) {
-    collocationsPromise = fetchCollocations(currentWord);
-  }
+  const collocationsPromise = needCollocations
+    ? fetchCollocations(currentWord)
+    : Promise.resolve(result.collocations || []);
 
-  // 2. Dictionary details (Phonetic & Definition)
-  const needDict = (fillPhonetic && (!result.phonetic || forceOverwrite)) || 
-                   (fillMeaning && (!result.meaning || forceOverwrite));
-  let dictPromise = Promise.resolve({ phonetic: result.phonetic || '', meaning: result.meaning || '', example: '' });
-  if (needDict) {
-    dictPromise = fetchDictionaryDetails(currentWord);
-  }
+  // 2. Dictionary details (Phonetic, Meaning, and Example candidate in 1 request)
+  const needPhonetic = fillPhonetic && (!result.phonetic || forceOverwrite);
+  const needMeaning = fillMeaning && (!result.meaning || forceOverwrite);
+  const needExample = fillExample && (!result.example || forceOverwrite);
+  const needDict = needPhonetic || needMeaning || needExample;
+
+  const dictPromise = needDict
+    ? fetchDictionaryDetails(currentWord)
+    : Promise.resolve({ phonetic: result.phonetic || '', meaning: result.meaning || '', example: '' });
 
   // 3. Vietnamese meaning
   const needViMeaning = fillViMeaning && (forceOverwrite || !result.viMeaning);
-  let viMeaningPromise = Promise.resolve(result.viMeaning || '');
-  if (needViMeaning) {
-    viMeaningPromise = translateToVi(currentWord);
-  }
+  const viMeaningPromise = needViMeaning
+    ? translateToVi(currentWord)
+    : Promise.resolve(result.viMeaning || '');
 
-  // 4. Example sentence
-  const needExample = fillExample && (forceOverwrite || !result.example);
-  let examplePromise = Promise.resolve(result.example || '');
-  if (needExample) {
-    examplePromise = fetchExampleSentence(currentWord);
-  }
-
-  const [cols, dictData, viM, ex] = await Promise.all([
+  // Execute primary requests in parallel
+  const [cols, dictData, viM] = await Promise.all([
     collocationsPromise,
     dictPromise,
-    viMeaningPromise,
-    examplePromise
+    viMeaningPromise
   ]);
 
   if (needCollocations && cols && cols.length > 0) {
     result.collocations = cols;
   }
-  if (needDict && dictData) {
-    if (fillPhonetic && dictData.phonetic && (!result.phonetic || forceOverwrite)) {
+  if (dictData) {
+    if (needPhonetic && dictData.phonetic) {
       result.phonetic = dictData.phonetic;
     }
-    if (fillMeaning && dictData.meaning && (!result.meaning || forceOverwrite)) {
+    if (needMeaning && dictData.meaning) {
       result.meaning = dictData.meaning;
     }
   }
-  if (needViMeaning && viM && (!result.viMeaning || forceOverwrite)) {
+  if (needViMeaning && viM) {
     result.viMeaning = viM;
   }
-  if (needExample && ex && (!result.example || forceOverwrite)) {
-    result.example = ex;
+
+  // 4. Handle example: if Free Dictionary gave us an example sentence, translate & use it immediately (bypassing slow Tatoeba)
+  if (needExample) {
+    if (dictData && dictData.example) {
+      const viEx = await translateToVi(dictData.example);
+      result.example = viEx ? `${dictData.example} (${viEx})` : dictData.example;
+    } else {
+      const ex = await fetchExampleSentence(currentWord);
+      if (ex) result.example = ex;
+    }
   }
 
   return result;
 };
 
 /**
- * Batch enrichment worker with concurrency control and live progress callback
+ * Batch enrichment worker with concurrency control, live progress callback, and real-time per-word persistence
  */
-export const enrichWordsBatch = async (wordsToEnrich, options = {}, onProgress, isCancelledRef) => {
+export const enrichWordsBatch = async (wordsToEnrich, options = {}, onProgress, isCancelledRef, onWordEnriched) => {
   if (!wordsToEnrich || wordsToEnrich.length === 0) return [];
 
-  const concurrency = options.concurrency || 3;
+  const concurrency = options.concurrency || 6;
   const results = [...wordsToEnrich];
   let completed = 0;
   const total = wordsToEnrich.length;
@@ -309,6 +303,15 @@ export const enrichWordsBatch = async (wordsToEnrich, options = {}, onProgress, 
 
         const enriched = await enrichSingleWord(wordItem, options);
         results[index] = enriched;
+
+        // Persist immediately in real-time as each word completes
+        if (onWordEnriched && typeof onWordEnriched === 'function') {
+          try {
+            onWordEnriched(enriched, index);
+          } catch (callbackErr) {
+            console.error('Error in onWordEnriched callback:', callbackErr);
+          }
+        }
       } catch (err) {
         console.error('Error enriching word in batch:', wordItem.word, err);
       } finally {
@@ -323,8 +326,8 @@ export const enrichWordsBatch = async (wordsToEnrich, options = {}, onProgress, 
         }
       }
 
-      // Small throttle to stay well within rate limits
-      await new Promise(r => setTimeout(r, 60));
+      // Minimal throttle between tasks to maintain smooth UI and avoid browser rate limits
+      await new Promise(r => setTimeout(r, 20));
     }
   };
 

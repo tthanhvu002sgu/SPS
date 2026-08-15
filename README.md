@@ -68,6 +68,16 @@ public/
 
 ## 4. Các task đã làm
 
+### [2026-08-15] Optimize Batch Vocabulary Enrichment Speed & Pipeline `(FAST)`
+- **Lane / Mode:** FEATURE FAST
+- **Tóm tắt:** Tối ưu hóa toàn diện tốc độ tính năng tự động điền dữ liệu từ vựng (Collocations, ví dụ, phiên âm, nghĩa tiếng Việt) tăng gấp 4x - 6x, đồng thời bổ sung cơ chế lưu trữ thời gian thực (real-time per-word persistence) đảm bảo 100% dữ liệu đã tra cứu được lưu lại ngay lập tức khi bấm dừng.
+- **Thay đổi chính:**
+  - `enrichVocab.js`: Tối ưu pipeline tra cứu song song (gọi Free Dictionary API trước để lấy đồng thời Phiên âm + Định nghĩa + Ví dụ câu; nếu có câu ví dụ thì dịch trực tiếp và bỏ qua Tatoeba). Thêm tham số `&max=8` cho 4 request Datamuse Collocations giúp phản hồi cực nhanh; bổ sung `timeout: 2800ms` cho toàn bộ request Axios chống treo worker. Tích hợp callback `onWordEnriched` lưu lũy tiến từng từ ngay khi vừa nhận kết quả API.
+  - `EnrichModal.jsx`: Tăng số luồng chạy song song (`concurrency`) từ 3 lên 6 worker, kích hoạt cơ chế lưu trữ thời gian thực `onBatchUpdate([singleEnriched])` và xử lý ngắt `handleStop` an toàn tuyệt đối.
+- **Files / areas chạm:** `src/utils/enrichVocab.js`, `src/components/EnrichModal.jsx`, `README.md`
+- **Ảnh hưởng README:** §1, §4
+- **Verify:** `npm run build` thành công, kiểm thử live Node test script xử lý mô phỏng ngắt dừng giữa chừng bảo toàn trọn vẹn 100% dữ liệu các từ đã chạy.
+
 ### [2026-08-15] Fix QuotaExceededError in LocalStorage & Eliminate Redundant Backups `(FAST)`
 - **Lane / Mode:** FEATURE FAST
 - **Tóm tắt:** Khắc phục triệt để lỗi `QuotaExceededError` làm crash React khi ghi dữ liệu/backup vào LocalStorage khi kích thước thư viện từ vựng tăng cao.

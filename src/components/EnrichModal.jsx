@@ -16,6 +16,7 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
   const [errorMsg, setErrorMsg] = useState('');
 
   const isCancelledRef = useRef(false);
+  const enrichedCountRef = useRef(0);
 
   // Compute words missing details
   const missingCount = words.filter(
@@ -29,6 +30,7 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
       setResultSummary(null);
       setErrorMsg('');
       isCancelledRef.current = false;
+      enrichedCountRef.current = 0;
     }
   }, [isOpen]);
 
@@ -61,6 +63,7 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
     setErrorMsg('');
     setIsRunning(true);
     isCancelledRef.current = false;
+    enrichedCountRef.current = 0;
     setResultSummary(null);
 
     const options = {
@@ -70,7 +73,7 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
       fillMeaning: fillPhoneticAndMeaning,
       fillPhonetic: fillPhoneticAndMeaning,
       forceOverwrite,
-      concurrency: 3
+      concurrency: 6
     };
 
     try {
@@ -78,14 +81,22 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
         targets,
         options,
         (prog) => setProgress(prog),
-        isCancelledRef
+        isCancelledRef,
+        (singleEnriched) => {
+          // Real-time incremental save: saves each word the moment it is enriched
+          enrichedCountRef.current += 1;
+          if (onBatchUpdate) {
+            onBatchUpdate([singleEnriched]);
+          }
+        }
       );
 
       if (enrichedResults && enrichedResults.length > 0) {
+        // Final consistency sync
         onBatchUpdate(enrichedResults);
         setResultSummary({
           total: targets.length,
-          completed: isCancelledRef.current ? progress.current : targets.length,
+          completed: enrichedCountRef.current || (isCancelledRef.current ? progress.current : targets.length),
           isCancelled: isCancelledRef.current
         });
       }
@@ -100,6 +111,11 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
   const handleStop = () => {
     isCancelledRef.current = true;
     setIsRunning(false);
+    setResultSummary({
+      total: progress.total || getTargetWords().length,
+      completed: enrichedCountRef.current || progress.current,
+      isCancelled: true
+    });
   };
 
   return (
