@@ -2,12 +2,12 @@ import { useState } from 'react';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { getInitialSRSData } from '../utils/srs';
-import { Search, Plus, Loader2, FileSpreadsheet, Zap, Bot } from 'lucide-react';
+import { Search, Plus, Loader2, FileSpreadsheet, Zap, Bot, X } from 'lucide-react';
 import ImportExcelCSV from './ImportExcelCSV';
 import { autoTagWords } from '../utils/aiTagger';
 import { enrichSingleWord } from '../utils/enrichVocab';
 
-const AddWord = ({ words = [], settings, topics = [], addTopic, onUpdateWord, onAdd, onAddWords }) => {
+const AddWord = ({ words = [], settings, topics = [], addTopic, onUpdateWord, onAdd, onAddWords, onClose }) => {
   const [activeAddTab, setActiveAddTab] = useState('manual');
   const [word, setWord] = useState('');
   const [meaning, setMeaning] = useState('');
@@ -452,119 +452,119 @@ const AddWord = ({ words = [], settings, topics = [], addTopic, onUpdateWord, on
   };
 
   return (
-    <div className="glass-panel" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
-        <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.95rem', margin: 0, fontWeight: 600 }}>
-          {activeAddTab === 'manual' && (
-            <>
-              <Plus size={16} className="text-gradient" /> Thêm từ mới
-            </>
-          )}
-          {activeAddTab === 'quick' && (
-            <>
-              <Zap size={16} className="text-gradient" /> Thêm nhanh (từ: dịch: câu ví dụ)
-            </>
-          )}
-          {activeAddTab === 'upload' && (
-            <>
-              <FileSpreadsheet size={16} className="text-gradient" /> Nhập từ Excel / CSV
-            </>
-          )}
-          {activeAddTab === 'autotag' && (
-            <>
-              <Bot size={16} className="text-gradient" /> AI Auto-Tagging
-            </>
-          )}
-        </h2>
+    <div className="vocab-card-minimal" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', padding: '1rem 1.15rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.6rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            {activeAddTab === 'manual' && <><Plus size={15} style={{ color: 'var(--accent-primary)' }} /> Thêm từ mới</>}
+            {activeAddTab === 'quick' && <><Zap size={15} style={{ color: 'var(--accent-warning)' }} /> Thêm nhanh</>}
+            {activeAddTab === 'upload' && <><FileSpreadsheet size={15} style={{ color: 'var(--accent-success)' }} /> Nhập file</>}
+            {activeAddTab === 'autotag' && <><Bot size={15} style={{ color: 'var(--accent-secondary)' }} /> AI Auto-Tag</>}
+          </span>
+        </div>
         
-        <div style={{ display: 'flex', gap: '0.25rem', background: 'rgba(0,0,0,0.15)', padding: '0.2rem', borderRadius: '8px', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => setActiveAddTab('manual')}
-            style={{
-              border: 'none',
-              background: activeAddTab === 'manual' ? 'var(--glass-bg)' : 'transparent',
-              color: activeAddTab === 'manual' ? 'var(--text-main)' : 'var(--text-muted)',
-              padding: '0.25rem 0.6rem',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '0.75rem',
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.25rem',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <Plus size={11} />
-            Thêm thủ công
-          </button>
-          
-          <button
-            type="button"
-            onClick={() => setActiveAddTab('quick')}
-            style={{
-              border: 'none',
-              background: activeAddTab === 'quick' ? 'var(--glass-bg)' : 'transparent',
-              color: activeAddTab === 'quick' ? 'var(--text-main)' : 'var(--text-muted)',
-              padding: '0.25rem 0.6rem',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '0.75rem',
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.25rem',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <Zap size={11} />
-            Thêm nhanh
-          </button>
-          
-          <button
-            type="button"
-            onClick={() => setActiveAddTab('upload')}
-            style={{
-              border: 'none',
-              background: activeAddTab === 'upload' ? 'var(--glass-bg)' : 'transparent',
-              color: activeAddTab === 'upload' ? 'var(--text-main)' : 'var(--text-muted)',
-              padding: '0.25rem 0.6rem',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '0.75rem',
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.25rem',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <FileSpreadsheet size={11} />
-            Nhập Excel / CSV
-          </button>
-          
-          <button
-            type="button"
-            onClick={() => setActiveAddTab('autotag')}
-            style={{
-              border: 'none',
-              background: activeAddTab === 'autotag' ? 'var(--glass-bg)' : 'transparent',
-              color: activeAddTab === 'autotag' ? 'var(--text-main)' : 'var(--text-muted)',
-              padding: '0.25rem 0.6rem',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '0.75rem',
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.25rem',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <Bot size={11} />
-            Auto-Tag Tất cả
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+          <div style={{ display: 'flex', gap: '0.2rem', background: 'rgba(0,0,0,0.06)', padding: '0.15rem', borderRadius: '8px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setActiveAddTab('manual')}
+              style={{
+                border: 'none',
+                background: activeAddTab === 'manual' ? 'var(--glass-bg)' : 'transparent',
+                color: activeAddTab === 'manual' ? 'var(--text-main)' : 'var(--text-muted)',
+                padding: '0.25rem 0.55rem',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '0.75rem',
+                fontWeight: activeAddTab === 'manual' ? 600 : 400,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Plus size={12} />
+              Thủ công
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => setActiveAddTab('quick')}
+              style={{
+                border: 'none',
+                background: activeAddTab === 'quick' ? 'var(--glass-bg)' : 'transparent',
+                color: activeAddTab === 'quick' ? 'var(--text-main)' : 'var(--text-muted)',
+                padding: '0.25rem 0.55rem',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '0.75rem',
+                fontWeight: activeAddTab === 'quick' ? 600 : 400,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Zap size={12} />
+              Thêm nhanh
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => setActiveAddTab('upload')}
+              style={{
+                border: 'none',
+                background: activeAddTab === 'upload' ? 'var(--glass-bg)' : 'transparent',
+                color: activeAddTab === 'upload' ? 'var(--text-main)' : 'var(--text-muted)',
+                padding: '0.25rem 0.55rem',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '0.75rem',
+                fontWeight: activeAddTab === 'upload' ? 600 : 400,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <FileSpreadsheet size={12} />
+              Excel / CSV
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => setActiveAddTab('autotag')}
+              style={{
+                border: 'none',
+                background: activeAddTab === 'autotag' ? 'var(--glass-bg)' : 'transparent',
+                color: activeAddTab === 'autotag' ? 'var(--text-main)' : 'var(--text-muted)',
+                padding: '0.25rem 0.55rem',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '0.75rem',
+                fontWeight: activeAddTab === 'autotag' ? 600 : 400,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Bot size={12} />
+              AI Tag
+            </button>
+          </div>
+
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn btn-outline"
+              style={{ padding: '0.25rem 0.35rem', borderRadius: '6px', border: 'none', marginLeft: '0.25rem' }}
+              title="Đóng bảng thêm từ"
+            >
+              <X size={15} />
+            </button>
+          )}
         </div>
       </div>
       

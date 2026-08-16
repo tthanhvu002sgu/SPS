@@ -1,5 +1,6 @@
 :root {
   --font-family: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', 'SF Mono', 'JetBrains Mono', monospace;
   --bg-dark: #0f172a;
   --bg-darker: #020617;
   --text-main: #f8fafc;
@@ -10,30 +11,54 @@
   --accent-success: #10b981;
   --accent-warning: #f59e0b;
   --accent-danger: #ef4444;
-  --glass-bg: rgba(255, 255, 255, 0.06);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.08);
   --glass-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-  --card-radius: 16px;
+  --card-radius: 12px;
   --surface: rgba(15, 23, 42, 0.85);
   --mobile-nav-h: 64px;
   --header-h: 64px;
+
+  /* Muted Pastel Design Tokens (Minimalist UI) */
+  --pastel-blue-bg: rgba(59, 130, 246, 0.12);
+  --pastel-blue-text: #60a5fa;
+  --pastel-green-bg: rgba(16, 185, 129, 0.12);
+  --pastel-green-text: #34d399;
+  --pastel-yellow-bg: rgba(245, 158, 11, 0.12);
+  --pastel-yellow-text: #fbbf24;
+  --pastel-red-bg: rgba(239, 68, 68, 0.12);
+  --pastel-red-text: #f87171;
+  --pastel-gray-bg: rgba(255, 255, 255, 0.07);
+  --pastel-gray-text: #cbd5e1;
 }
 
 [data-theme="sepia"] {
   --bg-dark: #FBF8EF;
   --bg-darker: #EFE9D8;
-  --text-main: #4A4A4A;
-  --text-muted: #827C75;
+  --text-main: #2F3437;
+  --text-muted: #787774;
   --accent-primary: #C0392B;
   --accent-primary-hover: #922B21;
   --accent-secondary: #2980B9;
   --accent-success: #27AE60;
   --accent-warning: #D35400;
   --accent-danger: #E74C3C;
-  --glass-bg: rgba(255, 255, 255, 0.55);
-  --glass-border: rgba(0, 0, 0, 0.08);
-  --glass-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(0, 0, 0, 0.07);
+  --glass-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   --surface: rgba(251, 248, 239, 0.95);
+
+  /* Muted Pastel Design Tokens (Sepia Warm Light) */
+  --pastel-blue-bg: #E1F3FE;
+  --pastel-blue-text: #1F6C9F;
+  --pastel-green-bg: #EDF3EC;
+  --pastel-green-text: #346538;
+  --pastel-yellow-bg: #FBF3DB;
+  --pastel-yellow-text: #956400;
+  --pastel-red-bg: #FDEBEC;
+  --pastel-red-text: #9F2F2D;
+  --pastel-gray-bg: rgba(0, 0, 0, 0.04);
+  --pastel-gray-text: #5A5856;
 }
 
 * {
@@ -625,3 +650,93 @@ p {
     display: none !important;
   }
 }
+
+/* Minimalist UI Tokens & Helpers */
+.horizontal-scroll-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  overflow-x: auto;
+  white-space: nowrap;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.horizontal-scroll-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Minimalist Vocab Card */
+.vocab-card-minimal {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 0.85rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.vocab-card-minimal:hover {
+  border-color: rgba(59, 130, 246, 0.3);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+[data-theme="sepia"] .vocab-card-minimal:hover {
+  border-color: rgba(0, 0, 0, 0.15);
+  background: #FFFFFF;
+}
+
+/* Minimal Badges */
+.badge-pastel {
+  font-size: 0.72rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 9999px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+.badge-pastel-blue {
+  background: var(--pastel-blue-bg);
+  color: var(--pastel-blue-text);
+}
+
+.badge-pastel-green {
+  background: var(--pastel-green-bg);
+  color: var(--pastel-green-text);
+}
+
+.badge-pastel-yellow {
+  background: var(--pastel-yellow-bg);
+  color: var(--pastel-yellow-text);
+}
+
+.badge-pastel-red {
+  background: var(--pastel-red-bg);
+  color: var(--pastel-red-text);
+}
+
+.badge-pastel-gray {
+  background: var(--pastel-gray-bg);
+  color: var(--pastel-gray-text);
+}
+
+/* Minimal Collapsible Container */
+.collapsible-container {
+  overflow: hidden;
+  transition: max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, margin 0.2s ease;
+}
+
