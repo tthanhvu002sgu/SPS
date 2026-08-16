@@ -68,6 +68,15 @@ public/
 
 ## 4. Các task đã làm
 
+### [2026-08-16] Fix Dynamic Missing Words Counting & Per-Field Breakdown in EnrichModal `(FAST)`
+- **Lane / Mode:** FEATURE FAST
+- **Tóm tắt:** Sửa lỗi logic đếm cứng "từ còn thiếu thông tin", chuyển sang cơ chế đếm động theo các checkbox dữ liệu được tick chọn và hiển thị số lượng thiếu chi tiết của từng trường dữ liệu.
+- **Thay đổi chính:**
+  - `EnrichModal.jsx`: Tách riêng hàm kiểm tra từng trường (`isMissingCollocations`, `isMissingExample`, `isMissingViMeaning`, `isMissingPhoneticAndMeaning`). Đếm động số từ thiếu theo đúng các trường người dùng tích chọn thay vì gộp cứng `|| !w.phonetic`. Hiển thị badge số lượng từ thiếu thực tế ngay trên từng checkbox dữ liệu để người dùng nắm rõ tình trạng.
+- **Files / areas chạm:** `src/components/EnrichModal.jsx`, `README.md`
+- **Ảnh hưởng README:** §1, §4
+- **Verify:** `npm run build` thành công, kiểm tra logic đếm động và bộ lọc.
+
 ### [2026-08-15] Optimize Batch Vocabulary Enrichment Speed & Pipeline `(FAST)`
 - **Lane / Mode:** FEATURE FAST
 - **Tóm tắt:** Tối ưu hóa toàn diện tốc độ tính năng tự động điền dữ liệu từ vựng (Collocations, ví dụ, phiên âm, nghĩa tiếng Việt) tăng gấp 4x - 6x, đồng thời bổ sung cơ chế lưu trữ thời gian thực (real-time per-word persistence) đảm bảo 100% dữ liệu đã tra cứu được lưu lại ngay lập tức khi bấm dừng.

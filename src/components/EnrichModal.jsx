@@ -18,10 +18,28 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
   const isCancelledRef = useRef(false);
   const enrichedCountRef = useRef(0);
 
-  // Compute words missing details
-  const missingCount = words.filter(
-    w => !w.collocations || w.collocations.length === 0 || !w.example || !w.viMeaning || !w.phonetic
-  ).length;
+  // Field-specific missing checkers
+  const isMissingCollocations = (w) => !w.collocations || !Array.isArray(w.collocations) || w.collocations.length === 0;
+  const isMissingExample = (w) => !w.example || !w.example.trim();
+  const isMissingViMeaning = (w) => !w.viMeaning || !w.viMeaning.trim();
+  const isMissingPhoneticAndMeaning = (w) => (!w.phonetic || !w.phonetic.trim()) || (!w.meaning || !w.meaning.trim());
+
+  // Individual breakdown counts across library
+  const missingCollocationsCount = words.filter(isMissingCollocations).length;
+  const missingExampleCount = words.filter(isMissingExample).length;
+  const missingViMeaningCount = words.filter(isMissingViMeaning).length;
+  const missingPhoneticAndMeaningCount = words.filter(isMissingPhoneticAndMeaning).length;
+
+  // Dynamic predicate checking if a word lacks any of the SELECTED fields
+  const isMissingBySelectedOptions = (w) => {
+    if (fillCollocations && isMissingCollocations(w)) return true;
+    if (fillExample && isMissingExample(w)) return true;
+    if (fillViMeaning && isMissingViMeaning(w)) return true;
+    if (fillPhoneticAndMeaning && isMissingPhoneticAndMeaning(w)) return true;
+    return false;
+  };
+
+  const dynamicMissingCount = words.filter(isMissingBySelectedOptions).length;
 
   useEffect(() => {
     if (isOpen) {
@@ -38,9 +56,7 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
 
   const getTargetWords = () => {
     if (scope === 'missing') {
-      return words.filter(
-        w => (!w.collocations || w.collocations.length === 0) || !w.example || !w.viMeaning || !w.phonetic
-      );
+      return words.filter(isMissingBySelectedOptions);
     }
     if (scope === 'filtered') {
       return filteredWords;
@@ -253,7 +269,9 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
                     <div>
                       <strong>Chỉ các từ còn thiếu thông tin</strong>
                       <span className="text-muted" style={{ fontSize: '0.75rem', display: 'block' }}>
-                        (Có {missingCount} từ đang thiếu Collocations, Ví dụ, hoặc Nghĩa TV)
+                        {(!fillCollocations && !fillExample && !fillViMeaning && !fillPhoneticAndMeaning)
+                          ? '(Vui lòng chọn ít nhất 1 loại dữ liệu ở mục 2)'
+                          : `(Có ${dynamicMissingCount} từ đang thiếu theo các mục bạn chọn bên dưới)`}
                       </span>
                     </div>
                   </label>
@@ -324,22 +342,28 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
                     style={{
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'space-between',
                       gap: '0.5rem',
                       padding: '0.5rem 0.7rem',
                       borderRadius: '8px',
-                      background: 'var(--glass-bg, rgba(255,255,255,0.04))',
-                      border: '1px solid var(--glass-border)',
+                      background: fillCollocations ? 'rgba(59, 130, 246, 0.08)' : 'var(--glass-bg, rgba(255,255,255,0.04))',
+                      border: fillCollocations ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--glass-border)',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={fillCollocations}
-                      onChange={(e) => setFillCollocations(e.target.checked)}
-                    />
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <Layers size={13} color="var(--accent-secondary)" /> 3 Collocations (EN)
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={fillCollocations}
+                        onChange={(e) => setFillCollocations(e.target.checked)}
+                      />
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <Layers size={13} color="var(--accent-secondary)" /> 3 Collocations (EN)
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', color: missingCollocationsCount > 0 ? 'var(--accent-warning, #f59e0b)' : 'var(--text-muted)', fontWeight: 500 }}>
+                      {missingCollocationsCount > 0 ? `(Thiếu ${missingCollocationsCount})` : '✓ Đủ'}
                     </span>
                   </label>
 
@@ -347,22 +371,28 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
                     style={{
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'space-between',
                       gap: '0.5rem',
                       padding: '0.5rem 0.7rem',
                       borderRadius: '8px',
-                      background: 'var(--glass-bg, rgba(255,255,255,0.04))',
-                      border: '1px solid var(--glass-border)',
+                      background: fillExample ? 'rgba(59, 130, 246, 0.08)' : 'var(--glass-bg, rgba(255,255,255,0.04))',
+                      border: fillExample ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--glass-border)',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={fillExample}
-                      onChange={(e) => setFillExample(e.target.checked)}
-                    />
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <BookOpen size={13} color="var(--accent-secondary)" /> 1 Câu ví dụ
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={fillExample}
+                        onChange={(e) => setFillExample(e.target.checked)}
+                      />
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <BookOpen size={13} color="var(--accent-secondary)" /> 1 Câu ví dụ
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', color: missingExampleCount > 0 ? 'var(--accent-warning, #f59e0b)' : 'var(--text-muted)', fontWeight: 500 }}>
+                      {missingExampleCount > 0 ? `(Thiếu ${missingExampleCount})` : '✓ Đủ'}
                     </span>
                   </label>
 
@@ -370,22 +400,28 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
                     style={{
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'space-between',
                       gap: '0.5rem',
                       padding: '0.5rem 0.7rem',
                       borderRadius: '8px',
-                      background: 'var(--glass-bg, rgba(255,255,255,0.04))',
-                      border: '1px solid var(--glass-border)',
+                      background: fillViMeaning ? 'rgba(59, 130, 246, 0.08)' : 'var(--glass-bg, rgba(255,255,255,0.04))',
+                      border: fillViMeaning ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--glass-border)',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={fillViMeaning}
-                      onChange={(e) => setFillViMeaning(e.target.checked)}
-                    />
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <Globe size={13} color="var(--accent-secondary)" /> Nghĩa tiếng Việt
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={fillViMeaning}
+                        onChange={(e) => setFillViMeaning(e.target.checked)}
+                      />
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <Globe size={13} color="var(--accent-secondary)" /> Nghĩa tiếng Việt
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', color: missingViMeaningCount > 0 ? 'var(--accent-warning, #f59e0b)' : 'var(--text-muted)', fontWeight: 500 }}>
+                      {missingViMeaningCount > 0 ? `(Thiếu ${missingViMeaningCount})` : '✓ Đủ'}
                     </span>
                   </label>
 
@@ -393,22 +429,28 @@ const EnrichModal = ({ isOpen, onClose, words = [], filteredWords = [], onBatchU
                     style={{
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'space-between',
                       gap: '0.5rem',
                       padding: '0.5rem 0.7rem',
                       borderRadius: '8px',
-                      background: 'var(--glass-bg, rgba(255,255,255,0.04))',
-                      border: '1px solid var(--glass-border)',
+                      background: fillPhoneticAndMeaning ? 'rgba(59, 130, 246, 0.08)' : 'var(--glass-bg, rgba(255,255,255,0.04))',
+                      border: fillPhoneticAndMeaning ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--glass-border)',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={fillPhoneticAndMeaning}
-                      onChange={(e) => setFillPhoneticAndMeaning(e.target.checked)}
-                    />
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <Volume2 size={13} color="var(--accent-secondary)" /> Phiên âm & Nghĩa EN
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={fillPhoneticAndMeaning}
+                        onChange={(e) => setFillPhoneticAndMeaning(e.target.checked)}
+                      />
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <Volume2 size={13} color="var(--accent-secondary)" /> Phiên âm & Nghĩa EN
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', color: missingPhoneticAndMeaningCount > 0 ? 'var(--accent-warning, #f59e0b)' : 'var(--text-muted)', fontWeight: 500 }}>
+                      {missingPhoneticAndMeaningCount > 0 ? `(Thiếu ${missingPhoneticAndMeaningCount})` : '✓ Đủ'}
                     </span>
                   </label>
                 </div>
